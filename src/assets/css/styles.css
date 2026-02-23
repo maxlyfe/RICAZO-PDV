@@ -545,8 +545,6 @@ body { font-family: var(--font-family); background-color: var(--bg-primary); col
   gap: 0.5rem;
 }
 
-/* Unidade Checkbox no Modal */
-
 /* ============================================
    PRODUÇÃO E ESTOQUE
    ============================================ */
@@ -815,34 +813,141 @@ body { font-family: var(--font-family); background-color: var(--bg-primary); col
   .ticket-footer { text-align: center; margin-top: 15px; font-size: 11px; margin-bottom: 20px;}
 }
 
-@media (max-width: 1024px) {
-  .venda-container { grid-template-columns: 1fr; height: auto; }
-  .painel-pedido { position: fixed; bottom: 0; left: 0; right: 0; height: 50vh; z-index: 100; border-radius: var(--border-radius-lg) var(--border-radius-lg) 0 0; transform: translateY(100%); transition: transform 0.3s ease; }
-  .painel-pedido.aberto { transform: translateY(0); }
-}
+/* ==========================================================================
+   📱 APP NATIVO - RESPONSIVIDADE MOBILE 
+   ========================================================================== */
 
 @media (max-width: 768px) {
-  .dashboard-header { flex-wrap: wrap; }
-  .unidade-atual-badge { margin: 0; width: 100%; justify-content: center; order: 3; }
-  .nav-perfis { border: none; padding: 0; margin: 0; order: 4; width: 100%; justify-content: center; }
-  .selecao-lista { grid-template-columns: 1fr; }
-  .produto-card { flex-direction: column; }
-  .produto-imagem { width: 100%; height: 150px; }
-  .produto-acoes { flex-direction: row; width: 100%; }
-}
+  /* Trava o scroll horizontal na página inteira */
+  html, body {
+    max-width: 100vw !important;
+    overflow-x: hidden !important;
+  }
 
-@media (max-width: 640px) {
-  .produtos-venda-grid { grid-template-columns: repeat(3, 1fr); gap: 0.75rem; padding: 1rem; }
-  .produto-venda-item { padding: 0.75rem; }
-  .produto-venda-imagem { width: 60px; height: 60px; font-size: 2rem; }
-  .produto-venda-nome { font-size: 0.75rem; }
-  .produto-venda-preco { font-size: 0.875rem; }
-  .mesa-item { min-height: 100px; }
-  .mesa-numero { font-size: 1.25rem; }
-  .modal-pagamento { max-width: 100%; border-radius: var(--border-radius-lg) var(--border-radius-lg) 0 0; position: fixed; bottom: 0; left: 0; right: 0; max-height: 85vh; }
-}
+  /* Header tipo App */
+  .dashboard-header {
+    padding: 0.5rem !important;
+    flex-wrap: wrap;
+    position: sticky;
+    top: 0;
+    z-index: 1000;
+  }
 
-@media (max-width: 380px) {
-  .produtos-venda-grid { grid-template-columns: repeat(2, 1fr); }
-  .dashboard-grid { grid-template-columns: 1fr; }
+  .dashboard-logo { font-size: 1.2rem !important; }
+  .user-details, #user-perfis { display: none !important; }
+  .user-info { margin-left: auto; padding: 0.25rem 0.5rem !important; }
+  .user-avatar { width: 30px; height: 30px; font-size: 0.8rem; }
+
+  /* Ajuste da Badge da Unidade */
+  #unidade-atual {
+    font-size: 0.75rem !important;
+    padding: 0.25rem 0.5rem !important;
+    max-width: 120px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    margin-left: 0.5rem !important;
+  }
+
+  /* Barra de Navegação Inferior no Header (Caixa, PDV) */
+  .nav-perfis {
+    width: 100%;
+    order: 4;
+    margin-top: 0.5rem !important;
+    padding: 0.5rem 0 0 0 !important;
+    border-top: 1px solid rgba(0,0,0,0.05);
+    border-right: none !important;
+    justify-content: flex-start !important;
+    overflow-x: auto;
+  }
+  [data-theme="dark"] .nav-perfis { border-top-color: rgba(255,255,255,0.05); }
+
+  .dashboard-main { padding: 0.5rem !important; }
+  .view-section { padding: 0 !important; }
+
+  /* MÁGICA DO TEXT-OVERFLOW NOS CARDS */
+  .unidade-card-modern, .produto-card-modern, .unidade-selecao-card, .card {
+    padding: 1rem !important;
+    gap: 0.75rem !important;
+    width: 100% !important;
+    max-width: calc(100vw - 1rem) !important;
+    margin-bottom: 1rem !important;
+  }
+
+  /* Evitar que o texto empurre o flexbox para fora do ecrã */
+  .unidade-selecao-info, .produto-info-modern, .unidade-card-body, 
+  #produtos-list .card > div:nth-child(2), #unidades-list .card > div:nth-child(2) {
+    min-width: 0 !important; /* CRÍTICO para ellipsis funcionar em flexbox */
+    flex: 1 !important;
+  }
+
+  .unidade-selecao-nome, .produto-nome-modern, .unidade-title-modern,
+  #produtos-list .card > div:nth-child(2) > div:first-child,
+  #unidades-list .card > div:nth-child(2) > div:first-child {
+    white-space: nowrap !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+    max-width: 100% !important;
+  }
+
+  .unidade-selecao-endereco, .produto-desc-modern, .unidade-subtitle-modern {
+    white-space: nowrap !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+    max-width: 100% !important;
+  }
+
+  /* Grades empilhadas */
+  .produtos-grid, .unidades-grid, .selecao-lista, .dashboard-grid {
+    grid-template-columns: 1fr !important;
+    gap: 0.75rem !important;
+    margin-top: 1rem !important;
+    padding: 0 !important;
+  }
+
+  /* Módulos PDV, Produção e Caixa - Tela Cheia */
+  .venda-container, .producao-grid, .caixa-container {
+    display: flex !important;
+    flex-direction: column !important;
+    height: auto !important;
+    gap: 0.5rem !important;
+  }
+
+  .painel-produtos, .painel-pedido {
+    width: 100% !important;
+    border: none !important;
+    max-height: none !important;
+  }
+
+  /* Grade interna do PDV/Producao (Cards com fotos) */
+  .produtos-venda-grid, .pdv-grid-otimizado, .grade-produtos {
+    grid-template-columns: repeat(auto-fill, minmax(110px, 1fr)) !important;
+    padding: 0.5rem !important;
+    gap: 0.5rem !important;
+  }
+
+  /* Tabelas (Scroll Horizontal) */
+  .table-responsive, #dashboard-auditoria-vendas, #modal-tabela-auditoria, #estoque-conteudo-unidade {
+    overflow-x: auto !important;
+    width: 100% !important;
+  }
+  
+  table { min-width: 500px !important; }
+
+  /* Modal Ocupando a Tela Toda (App Style) */
+  .modal-content {
+    width: 100% !important;
+    max-width: 100% !important;
+    height: 100% !important;
+    max-height: 100vh !important;
+    margin: 0 !important;
+    border-radius: 0 !important;
+    padding: 1rem !important;
+    display: flex;
+    flex-direction: column;
+  }
+  
+  .modal-content form { flex: 1; display: flex; flex-direction: column; overflow-y: auto; }
+  .modal-actions { margin-top: auto; flex-direction: column; gap: 0.5rem; padding-bottom: 1rem; }
+  .modal-actions button { width: 100% !important; padding: 1rem !important; }
 }

@@ -89,24 +89,41 @@ class RicaZoApp {
     
     if (!user || !unidade || !navPerfis) return;
 
-    const perfisOperacionais = user.perfis.filter(p => ['caixa', 'pdv', 'producao'].includes(p));
+    // Pega a view atual
+    const urlParams = new URLSearchParams(window.location.search);
+    const viewAtual = urlParams.get('view') || this.getDefaultView();
+
+    // REGRA DE UX: Se estiver no Dashboard Admin ou a Selecionar Unidade, ESCONDE OS BOTÕES.
+    if (viewAtual === 'admin' || viewAtual === 'selecao-unidade') {
+      navPerfis.style.display = 'none';
+      return;
+    }
+
+    let perfisOperacionais = user.perfis.filter(p => ['caixa', 'pdv', 'producao'].includes(p));
     
-    if (perfisOperacionais.length > 1) {
-      const viewAtual = new URLSearchParams(window.location.search).get('view');
+    // Se for dev/admin E ESTIVER DENTRO DE UMA UNIDADE, mostra todos os botões operacionais
+    if (auth.isDev() || auth.isAdmin()) {
+      perfisOperacionais = ['caixa', 'pdv', 'producao'];
+    }
+
+    if (perfisOperacionais.length > 0) {
       const slug = auth.gerarSlug(unidade.nome); // Usar Slug limpo na navegação
       
       navPerfis.innerHTML = perfisOperacionais.map(p => {
         const isAtivo = viewAtual === p;
         const icones = { caixa: '🖥️', pdv: '📱', producao: '🏭' };
+        const label = (typeof CONFIG !== 'undefined' && CONFIG.PERFIS_LABELS && CONFIG.PERFIS_LABELS[p]) ? CONFIG.PERFIS_LABELS[p] : p.toUpperCase();
         return `
           <a href="/src/pages/dashboard/?view=${p}&unidade=${slug}" 
              class="nav-perfil-item ${isAtivo ? 'ativo' : ''}">
-            ${icones[p]} ${CONFIG.PERFIS_LABELS[p]}
+            ${icones[p]} ${label}
           </a>
         `;
       }).join('');
       
       navPerfis.style.display = 'flex';
+    } else {
+      navPerfis.style.display = 'none';
     }
   }
 
@@ -148,6 +165,7 @@ class RicaZoApp {
         if (auth.isDev() || auth.isAdmin()) {
           const promises = [];
           if (typeof dashboardModule !== 'undefined') promises.push(dashboardModule.carregarEstatisticas());
+          if (typeof estoqueModule !== 'undefined') promises.push(estoqueModule.load()); // Injeção do Estoque
           if (typeof unidadesModule !== 'undefined') promises.push(unidadesModule.load());
           if (typeof usuariosModule !== 'undefined') promises.push(usuariosModule.load());
           if (typeof produtosModule !== 'undefined') promises.push(produtosModule.load());
@@ -291,6 +309,7 @@ class RicaZoApp {
               </div>
             </div>
 
+            ${this.renderSection('estoque', '📦 Controlo Diário de Stock e Descartes', '', false)}
             ${this.renderSection('unidades', '🏪 Gerenciar Unidades', 'unidadesModule.openModal()', auth.podeGerenciarUnidades())}
             ${this.renderSection('usuarios', '👥 Gerenciar Utilizadores', 'usuariosModule.openModal()', true)}
             ${this.renderSection('produtos', '🥖 Gerenciar Produtos', 'produtosModule.openModal()', true)}
@@ -375,7 +394,7 @@ class RicaZoApp {
           <h3 class="card-title">${title}</h3>
           ${mostrarBotao ? `<button class="btn btn-primary btn-sm" onclick="${onClick}">+ Novo</button>` : ''}
         </div>
-        <div id="${id}-list" class="${id === 'unidades' || id === 'produtos' ? id + '-grid' : ''}">
+        <div id="${id}-list" class="${id === 'unidades' || id === 'produtos' ? id + '-grid' : ''}" style="padding: ${id === 'estoque' ? '0' : '0 1rem 1rem 1rem'}; box-sizing: border-box; width: 100%;">
           <div class="text-center" style="padding: 2rem;">
             <div class="spinner" style="margin: 0 auto 1rem;"></div>
             <p>A carregar...</p>
