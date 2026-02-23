@@ -1,57 +1,54 @@
 /**
- * RICAZO - Módulo de Produção
- * Envia produtos da fábrica para as unidades
+ * RICAZO - Módulo de Produção (Fábrica)
  */
 
 class ProducaoModule {
   constructor() {
+    this.unidadeOrigemId = null;
+    this.unidadesDestino = [];
     this.produtos = [];
-    this.unidades = [];
-    this.unidadeAtual = null; // Fábrica atual
-    this.historicoEnvios = [];
+    this.carrinho = [];
+    this.historico = [];
   }
 
   async init() {
-    // Pega unidade da URL (fabrica ou específica)
-    const urlParams = new URLSearchParams(window.location.search);
-    const unidadeId = urlParams.get('unidade') || 'fabrica';
+    // Lê o ID real (UUID) diretamente da sessão segura
+    const unidade = auth.getUnidadeAtual();
     
-    await this.carregarUnidadeAtual(unidadeId);
+    if (!unidade || !unidade.id || !unidade.id.includes('-')) {
+      console.error('ID de unidade inválido ou ausente na sessão.');
+      alert('Erro de Sessão: Por favor, selecione a unidade novamente.');
+      window.location.href = '/src/pages/dashboard/?view=selecao-unidade';
+      return;
+    }
+    
+    this.unidadeOrigemId = unidade.id;
+    this.carrinho = [];
+
+    // Carrega os dados em paralelo para ser mais rápido
     await Promise.all([
+      this.loadUnidadesDestino(),
       this.loadProdutos(),
-      this.loadUnidadesDestino()
+      this.loadHistorico()
     ]);
+    
     this.render();
-    this.carregarHistorico();
   }
 
-  async carregarUnidadeAtual(unidadeId) {
+  async loadUnidadesDestino() {
     try {
-      if (unidadeId === 'fabrica') {
-        // Busca a primeira fábrica/matriz
-        const { data, error } = await db.getClient()
-          .from('unidades')
-          .select('*')
-          .eq('tipo', 'fabrica')
-          .eq('ativo', true)
-          .single();
-        
-        if (error) throw error;
-        this.unidadeAtual = data;
-      } else {
-        // Busca unidade específica
-        const { data, error } = await db.getClient()
-          .from('unidades')
-          .select('*')
-          .eq('id', unidadeId)
-          .single();
-        
-        if (error) throw error;
-        this.unidadeAtual = data;
-      }
+      const { data, error } = await db.getClient()
+        .from('unidades')
+        .select('id, nome, tipo')
+        .neq('id', this.unidadeOrigemId) // A fábrica não pode enviar pão para ela mesma
+        .eq('ativo', true)
+        .eq('visivel', true)
+        .order('nome');
+
+      if (error) throw error;
+      this.unidadesDestino = data || [];
     } catch (error) {
-      console.error('Erro ao carregar unidade:', error);
-      alert('❌ Unidade não encontrada');
+      console.error('Erro ao carregar unidades de destino:', error);
     }
   }
 
@@ -59,7 +56,7 @@ class ProducaoModule {
     try {
       const { data, error } = await db.getClient()
         .from('produtos')
-        .select(`*`)
+        .select('*')
         .eq('ativo', true)
         .eq('visivel', true)
         .order('nome');
@@ -71,426 +68,383 @@ class ProducaoModule {
     }
   }
 
-  async loadUnidadesDestino() {
+  async loadHistorico() {
     try {
+      if (!this.unidadeOrigemId) return;
+
       const { data, error } = await db.getClient()
-        .from('unidades')
-        .select('*')
-        .eq('ativo', true)
-        .eq('visivel', true)
-        .neq('id', this.unidadeAtual?.id) // Exclui a unidade atual (fábrica)
-        .neq('tipo', 'fabrica') // E outras fábricas se houver
-        .order('nome');
-
-      if (error) throw error;
-      this.unidades = data || [];
-    } catch (error) {
-      console.error('Erro ao carregar unidades:', error);
-    }
-  }
-
-    render() {
-    const container = document.getElementById('producao-content');
-    if (!container) return;
-
-    const nomeUnidade = this.unidadeAtual?.nome || 'Fábrica';
-
-    container.innerHTML = `
-      <div class="card" style="margin-bottom: 1.5rem; background: linear-gradient(135deg, var(--primary-light), var(--primary)); color: white;">
-        <div class="card-header" style="border-bottom: none;">
-          <h3 class="card-title" style="color: white; font-size: 1.5rem;">🏭 ${nomeUnidade}</h3>
-          <span style="opacity: 0.9; font-size: 0.875rem;">Módulo de Produção</span>
-        </div>
-      </div>
-
-      <div class="producao-grid">
-        <div class="card">
-          <div class="card-header">
-            <h3 class="card-title">📦 Produtos para Envio</h3>
-            <small style="color: var(--success);">✓ Disponível para envio</small>
-          </div>
-          
-          <!-- CAMPO DE BUSCA -->
-          <div style="padding: 1rem; border-bottom: 1px solid var(--border-color);">
-            <div class="form-group" style="margin-bottom: 0;">
-              <input 
-                type="text" 
-                id="busca-produto" 
-                class="form-input" 
-                placeholder="🔍 Buscar produto por nome..."
-                onkeyup="producaoModule.filtrarProdutos(this.value)"
-              >
-            </div>
-          </div>
-          
-          <div id="lista-produtos-envio" style="max-height: 400px; overflow-y: auto;">
-            ${this.renderListaProdutos()}
-          </div>
-        </div>
-
-        <div class="card">
-          <div class="card-header">
-            <h3 class="card-title">🚚 Unidades de Destino</h3>
-            <small style="color: var(--text-muted);">${this.unidades.length} unidade(s)</small>
-          </div>
-          <div id="lista-unidades-destino">
-            ${this.renderListaUnidades()}
-          </div>
-          <div style="padding: 1rem; border-top: 1px solid var(--border-color);">
-            <button class="btn btn-primary w-full" onclick="producaoModule.confirmarEnvio()" id="btn-enviar" disabled>
-              📤 Enviar Produção
-            </button>
-          </div>
-        </div>
-      </div>
-
-      <div class="card" style="margin-top: 2rem;">
-        <div class="card-header">
-          <h3 class="card-title">📋 Histórico de Envios (Hoje)</h3>
-          <button class="btn btn-sm btn-secondary" onclick="producaoModule.carregarHistorico()">🔄 Atualizar</button>
-        </div>
-        <div id="historico-envios">
-          <p class="text-center" style="padding: 2rem; color: var(--text-muted);">
-            Carregando histórico...
-          </p>
-        </div>
-      </div>
-    `;
-  }
-
-    filtrarProdutos(termo) {
-    const container = document.getElementById('lista-produtos-envio');
-    if (!container) return;
-
-    const termoLower = termo.toLowerCase().trim();
-    
-    // Se vazio, mostra todos
-    if (!termoLower) {
-      container.innerHTML = this.renderListaProdutos();
-      return;
-    }
-
-    // Filtra produtos
-    const produtosFiltrados = this.produtos.filter(p => 
-      p.nome.toLowerCase().includes(termoLower)
-    );
-
-    if (produtosFiltrados.length === 0) {
-      container.innerHTML = `
-        <div class="text-center" style="padding: 2rem; color: var(--text-muted);">
-          <p>🔍 Nenhum produto encontrado</p>
-          <small>Tente outro termo de busca</small>
-        </div>
-      `;
-      return;
-    }
-
-    // Renderiza filtrados (reutiliza o HTML mas com lista filtrada)
-    container.innerHTML = produtosFiltrados.map(p => `
-      <div class="produto-envio-item" data-produto-id="${p.id}">
-        <div class="produto-envio-info">
-          <div class="produto-envio-nome">${p.nome}</div>
-          <div class="produto-envio-tipo">${p.tipo_preco === 'peso' ? '⚖️ Por KG' : '📦 Por Unidade'}</div>
-        </div>
-        <div class="produto-envio-quantidade">
-          <input type="number" 
-                 step="${p.tipo_preco === 'peso' ? '0.001' : '1'}" 
-                 min="0" 
-                 class="form-input input-qtd" 
-                 placeholder="Qtd"
-                 onchange="producaoModule.verificarPodeEnviar()"
-                 data-tipo="${p.tipo_preco}">
-        </div>
-      </div>
-    `).join('');
-    
-    // Reativa o listener de verificação
-    this.verificarPodeEnviar();
-  }
-
-  renderListaProdutos() {
-    if (this.produtos.length === 0) {
-      return '<p style="padding: 1rem; color: var(--text-muted);">Nenhum produto cadastrado</p>';
-    }
-
-    return this.produtos.map(p => `
-      <div class="produto-envio-item" data-produto-id="${p.id}">
-        <div class="produto-envio-info">
-          <div class="produto-envio-nome">${p.nome}</div>
-          <div class="produto-envio-tipo">${p.tipo_preco === 'peso' ? '⚖️ Por KG' : '📦 Por Unidade'}</div>
-        </div>
-        <div class="produto-envio-quantidade">
-          <input type="number" 
-                 step="${p.tipo_preco === 'peso' ? '0.001' : '1'}" 
-                 min="0" 
-                 class="form-input input-qtd" 
-                 placeholder="Qtd"
-                 onchange="producaoModule.verificarPodeEnviar()"
-                 data-tipo="${p.tipo_preco}">
-        </div>
-      </div>
-    `).join('');
-  }
-
-  renderListaUnidades() {
-    if (this.unidades.length === 0) {
-      return '<p style="padding: 1rem; color: var(--text-muted);">Nenhuma unidade disponível para envio</p>';
-    }
-
-    return this.unidades.map(u => `
-      <label class="unidade-destino-item">
-        <input type="checkbox" name="unidade_destino" value="${u.id}" onchange="producaoModule.verificarPodeEnviar()">
-        <div class="unidade-destino-info">
-          <div class="unidade-destino-nome">${u.nome}</div>
-          <div class="unidade-destino-tipo">${this.formatTipoUnidade(u.tipo)}</div>
-        </div>
-      </label>
-    `).join('');
-  }
-
-  formatTipoUnidade(tipo) {
-    const tipos = {
-      'loja': '🏪 Loja',
-      'quiosque': '📍 Quiosque'
-    };
-    return tipos[tipo] || tipo;
-  }
-
-  verificarPodeEnviar() {
-    const temQuantidade = Array.from(document.querySelectorAll('.input-qtd')).some(input => parseFloat(input.value) > 0);
-    const temUnidade = document.querySelectorAll('input[name="unidade_destino"]:checked').length > 0;
-    
-    const btn = document.getElementById('btn-enviar');
-    if (btn) {
-      btn.disabled = !(temQuantidade && temUnidade);
-    }
-  }
-
-  async confirmarEnvio() {
-    const produtosEnvio = [];
-    document.querySelectorAll('.produto-envio-item').forEach(item => {
-      const input = item.querySelector('.input-qtd');
-      const qtd = parseFloat(input.value);
-      if (qtd > 0) {
-        produtosEnvio.push({
-          produto_id: item.dataset.produtoId,
-          quantidade: qtd
-        });
-      }
-    });
-
-    const unidadesDestino = Array.from(document.querySelectorAll('input[name="unidade_destino"]:checked'))
-      .map(cb => cb.value);
-
-    if (produtosEnvio.length === 0 || unidadesDestino.length === 0) {
-      alert('❌ Selecione produtos e unidades de destino');
-      return;
-    }
-
-    const resumo = produtosEnvio.map(p => {
-      const prod = this.produtos.find(prod => prod.id === p.produto_id);
-      return `• ${prod.nome}: ${p.quantidade} ${prod.tipo_preco === 'peso' ? 'kg' : 'un'}`;
-    }).join('\n');
-
-    const confirmar = confirm(
-      `Enviar da ${this.unidadeAtual.nome} para ${unidadesDestino.length} unidade(s):\n\n${resumo}`
-    );
-    if (!confirmar) return;
-
-    try {
-      await this.processarEnvio(produtosEnvio, unidadesDestino);
-      alert('✅ Envio realizado com sucesso!');
-      await this.init();
-      
-    } catch (error) {
-      console.error('Erro no envio:', error);
-      alert('❌ Erro: ' + error.message);
-    }
-  }
-
-  async processarEnvio(produtos, unidadesDestino) {
-    const usuarioId = auth.getCurrentUser()?.id;
-    const fabricaId = this.unidadeAtual.id;
-
-    for (const unidadeId of unidadesDestino) {
-      for (const item of produtos) {
-        // 1. Registra SAÍDA da fábrica
-        await db.insert('estoque_movimentacao', [{
-          unidade_id: fabricaId,
-          produto_id: item.produto_id,
-          tipo: 'producao',
-          quantidade: -item.quantidade,
-          quantidade_anterior: 0,
-          quantidade_nova: 0,
-          usuario_id: usuarioId,
-          observacao: `Envio para unidade ${unidadeId}`
-        }]);
-
-        // 2. Atualiza estoque da unidade destino
-        const { data: estoqueUnidade } = await db.getClient()
-          .from('estoque')
-          .select('*')
-          .eq('produto_id', item.produto_id)
-          .eq('unidade_id', unidadeId)
-          .single();
-
-        const qtdAnterior = estoqueUnidade ? estoqueUnidade.quantidade : 0;
-        const qtdNova = qtdAnterior + item.quantidade;
-
-        if (estoqueUnidade) {
-          await db.getClient()
-            .from('estoque')
-            .update({ quantidade: qtdNova, updated_by: usuarioId })
-            .eq('id', estoqueUnidade.id);
-        } else {
-          await db.insert('estoque', [{
-            unidade_id: unidadeId,
-            produto_id: item.produto_id,
-            quantidade: item.quantidade,
-            updated_by: usuarioId
-          }]);
-        }
-
-        // 3. Registra ENTRADA na unidade
-        await db.insert('estoque_movimentacao', [{
-          unidade_id: unidadeId,
-          produto_id: item.produto_id,
-          tipo: 'entrada',
-          quantidade: item.quantidade,
-          quantidade_anterior: qtdAnterior,
-          quantidade_nova: qtdNova,
-          origem_unidade_id: fabricaId,
-          usuario_id: usuarioId,
-          observacao: `Recebido de ${this.unidadeAtual.nome}`
-        }]);
-      }
-    }
-  }
-
-      async carregarHistorico() {
-    const container = document.getElementById('historico-envios');
-    if (!container) return;
-
-    try {
-      const hoje = new Date().toISOString().split('T')[0];
-      
-      // Busca envios de hoje (saídas da fábrica)
-      const { data: envios, error } = await db.getClient()
         .from('estoque_movimentacao')
         .select(`
           *,
           produto:produtos(nome, tipo_preco)
         `)
         .eq('tipo', 'producao')
-        .eq('unidade_id', this.unidadeAtual?.id)
-        .gte('created_at', hoje)
-        .order('created_at', { ascending: false });
+        .eq('unidade_id', this.unidadeOrigemId) 
+        .order('created_at', { ascending: false })
+        .limit(50); 
 
       if (error) throw error;
-
-      if (!envios || envios.length === 0) {
-        container.innerHTML = `
-          <div class="text-center" style="padding: 2rem; color: var(--text-muted);">
-            <p>📭 Nenhum envio realizado hoje</p>
-          </div>
-        `;
-        return;
-      }
-
-      // Busca nomes das unidades de destino (está na observação ou precisamos buscar separado)
-      // Extrai IDs das unidades de destino das observações
-      const unidadeIds = [...new Set(envios.map(e => {
-        const match = e.observacao?.match(/Envio para unidade ([a-f0-9-]+)/);
-        return match ? match[1] : null;
-      }).filter(Boolean))];
-
-      // Busca nomes das unidades
-      let unidadesNomes = {};
-      if (unidadeIds.length > 0) {
-        const { data: unidadesData } = await db.getClient()
-          .from('unidades')
-          .select('id, nome')
-          .in('id', unidadeIds);
-        
-        unidadesNomes = (unidadesData || []).reduce((acc, u) => {
-          acc[u.id] = u.nome;
-          return acc;
-        }, {});
-      }
-
-      // Agrupa por unidade de destino
-      const porUnidade = {};
-      envios.forEach(mov => {
-        const match = mov.observacao?.match(/Envio para unidade ([a-f0-9-]+)/);
-        const unidadeId = match ? match[1] : 'desconhecida';
-        const unidadeNome = unidadesNomes[unidadeId] || 'Unidade Desconhecida';
-        
-        if (!porUnidade[unidadeNome]) {
-          porUnidade[unidadeNome] = [];
-        }
-        porUnidade[unidadeNome].push(mov);
-      });
-
-      // Renderiza agrupado
-      container.innerHTML = Object.entries(porUnidade).map(([unidadeNome, movimentacoes]) => `
-        <div class="envio-grupo" style="margin-bottom: 1.5rem;">
-          <div class="envio-grupo-header" style="
-            background: var(--bg-secondary);
-            padding: 0.75rem 1rem;
-            border-radius: var(--border-radius);
-            margin-bottom: 0.5rem;
-            display: flex;
-            align-items: center;
-            gap: 0.5rem;
-          ">
-            <span>🏪</span>
-            <strong>${unidadeNome}</strong>
-            <span style="color: var(--text-muted); font-size: 0.875rem; margin-left: auto;">
-              ${movimentacoes.length} item(s)
-            </span>
-          </div>
-          
-          <table style="width: 100%; border-collapse: collapse; font-size: 0.875rem;">
-            <thead>
-              <tr style="border-bottom: 1px solid var(--border-color); color: var(--text-muted);">
-                <th style="padding: 0.5rem; text-align: left;">Horário</th>
-                <th style="padding: 0.5rem; text-align: left;">Produto</th>
-                <th style="padding: 0.5rem; text-align: right;">Qtd</th>
-                <th style="padding: 0.5rem; text-align: left;">Status</th>
-              </tr>
-            </thead>
-            <tbody>
-              ${movimentacoes.map(mov => `
-                <tr style="border-bottom: 1px solid var(--border-color);">
-                  <td style="padding: 0.5rem;">${new Date(mov.created_at).toLocaleTimeString('pt-BR', {hour: '2-digit', minute:'2-digit'})}</td>
-                  <td style="padding: 0.5rem;">${mov.produto?.nome || '-'}</td>
-                  <td style="padding: 0.5rem; text-align: right; font-weight: 600;">
-                    ${Math.abs(mov.quantidade)} ${mov.produto?.tipo_preco === 'peso' ? 'kg' : 'un'}
-                  </td>
-                  <td style="padding: 0.5rem;">
-                    <span style="
-                      background: var(--success);
-                      color: white;
-                      padding: 0.125rem 0.5rem;
-                      border-radius: 12px;
-                      font-size: 0.75rem;
-                    ">Enviado</span>
-                  </td>
-                </tr>
-              `).join('')}
-            </tbody>
-          </table>
-        </div>
-      `).join('');
-
+      this.historico = data || [];
     } catch (error) {
       console.error('Erro ao carregar histórico:', error);
-      container.innerHTML = `
-        <div class="text-center" style="padding: 2rem; color: var(--danger);">
-          <p>❌ Erro ao carregar histórico</p>
-          <small>${error.message}</small>
+    }
+  }
+
+  render() {
+    const container = document.getElementById('producao-content');
+    if (!container) return;
+
+    container.innerHTML = `
+      <style>
+        .producao-grid { display: grid; grid-template-columns: 2fr 400px; gap: 1.5rem; height: calc(100vh - 120px); }
+        @media(max-width: 1024px) { .producao-grid { grid-template-columns: 1fr; height: auto; } }
+        
+        .pdv-grid-otimizado { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 1rem; padding: 1.5rem; overflow-y: auto; flex: 1; align-content: start; }
+        .produto-venda-card-otimizado { background: var(--bg-primary); border: 2px solid var(--border-color); border-radius: var(--border-radius-lg); padding: 1rem; text-align: center; cursor: pointer; transition: var(--transition); display: flex; flex-direction: column; align-items: center; gap: 0.75rem; }
+        .produto-venda-card-otimizado:hover { border-color: var(--primary); transform: translateY(-4px); box-shadow: var(--shadow-md); }
+      </style>
+
+      <div class="producao-grid animate-fade-in">
+        
+        <!-- LADO ESQUERDO: Catálogo de Produtos e Histórico -->
+        <div class="card" style="display: flex; flex-direction: column; overflow: hidden; padding: 0; box-shadow: none; border: 1px solid var(--border-color);">
+          <div class="card-header" style="border-bottom: 1px solid var(--border-color); margin: 0;">
+            <h3 class="card-title">🏭 Catálogo de Produtos</h3>
+            <div class="form-group" style="margin: 0; width: 250px;">
+              <input type="text" class="form-input" placeholder="Buscar produto..." onkeyup="producaoModule.filtrarProdutos(this.value)">
+            </div>
+          </div>
+          
+          <div id="grade-produtos-producao" class="pdv-grid-otimizado custom-scrollbar" style="flex: 1;">
+            ${this.renderListaProdutos(this.produtos)}
+          </div>
+          
+          <div style="height: 200px; border-top: 2px solid var(--border-color); background: var(--bg-secondary); display: flex; flex-direction: column;">
+            <div style="padding: 0.5rem 1rem; font-weight: bold; font-size: 0.85rem; text-transform: uppercase; color: var(--text-secondary);">Últimos Envios Realizados</div>
+            <div style="overflow-y: auto; flex: 1; padding: 0 1rem 1rem 1rem;" class="custom-scrollbar">
+              ${this.renderHistorico()}
+            </div>
+          </div>
+        </div>
+
+        <!-- LADO DIREITO: Painel de Envio -->
+        <div class="painel-pedido" style="box-shadow: none; border: 1px solid var(--border-color);">
+          <div class="painel-pedido-header">
+            <h2 style="font-size: 1.25rem; font-weight: 800; color: var(--primary); margin: 0;">🚚 Preparar Envio</h2>
+          </div>
+          
+          <div style="padding: 1rem; background: var(--bg-secondary); border-bottom: 1px solid var(--border-color);">
+            <label class="form-label">Unidade de Destino *</label>
+            <select id="select-destino" class="form-input" style="font-weight: bold; border-color: var(--primary);">
+              <option value="">-- Selecione a Loja/Destino --</option>
+              ${this.unidadesDestino.map(u => `<option value="${u.id}">🏪 ${u.nome}</option>`).join('')}
+            </select>
+          </div>
+
+          <div class="pedido-itens custom-scrollbar" id="producao-carrinho" style="padding: 1rem; flex: 1;">
+            ${this.renderCarrinho()}
+          </div>
+          
+          <div class="pedido-acoes" style="padding: 1.5rem;">
+            <button class="btn btn-secondary w-full" style="margin-bottom: 0.5rem;" onclick="producaoModule.limparCarrinho()" ${this.carrinho.length === 0 ? 'disabled' : ''}>Limpar Caixa</button>
+            <button class="btn btn-primary w-full btn-lg" onclick="producaoModule.confirmarEnvio()" ${this.carrinho.length === 0 ? 'disabled' : ''}>🚀 DESPACHAR PRODUTOS</button>
+          </div>
+        </div>
+
+      </div>
+    `;
+  }
+
+  renderListaProdutos(lista) {
+    if (lista.length === 0) return `<div style="grid-column: 1/-1; text-align: center; color: var(--text-muted); padding: 2rem;">Nenhum produto encontrado.</div>`;
+    
+    return lista.map(p => `
+      <div class="produto-venda-card-otimizado" onclick="producaoModule.abrirModalQuantidade('${p.id}')">
+        <div style="width: 80px; height: 80px; flex-shrink: 0; background: var(--bg-secondary); border-radius: var(--border-radius); display: flex; align-items: center; justify-content: center; overflow: hidden; box-shadow: var(--shadow-sm);">
+          ${p.imagem_url 
+            ? `<img src="${p.imagem_url}" style="width: 100%; height: 100%; object-fit: cover;" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
+               <div style="display:none; font-size: 2rem;">🥖</div>` 
+            : '<div style="font-size: 2rem;">🥖</div>'}
+        </div>
+        <div style="width: 100%;">
+          <div title="${p.nome}" style="font-weight: 700; color: var(--text-primary); margin-bottom: 0.5rem; line-height: 1.2; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;">
+            ${p.nome}
+          </div>
+          <div style="font-size: 0.7rem; color: var(--text-muted); font-weight: 700; text-transform: uppercase;">
+            <span style="background: var(--bg-secondary); padding: 0.15rem 0.5rem; border-radius: 12px; border: 1px solid var(--border-color);">
+              ${p.tipo_preco === 'peso' ? '⚖️ KG' : '📦 UN'}
+            </span>
+          </div>
+        </div>
+      </div>
+    `).join('');
+  }
+
+  filtrarProdutos(termo) {
+    const t = termo.toLowerCase();
+    document.getElementById('grade-produtos-producao').innerHTML = this.renderListaProdutos(this.produtos.filter(p => p.nome.toLowerCase().includes(t)));
+  }
+
+  // ==========================================
+  // NOVOS MODAIS PROFISSIONAIS (SUBSTITUEM O PROMPT)
+  // ==========================================
+  abrirModalQuantidade(produtoId) {
+    const produto = this.produtos.find(p => p.id === produtoId);
+    if (!produto) return;
+
+    if (produto.tipo_preco === 'peso') {
+      this.renderModalPeso(produto);
+    } else {
+      this.renderModalUnidade(produto);
+    }
+  }
+
+  renderModalPeso(produto) {
+    const content = `
+      <div class="card-header">
+        <h3 class="card-title">⚖️ Volume de Envio (Por Quilo)</h3>
+        <button class="btn btn-ghost btn-sm" onclick="modal.close()">✕</button>
+      </div>
+      <form onsubmit="producaoModule.confirmarAdicaoModal(event, '${produto.id}')">
+        <div style="text-align: center; margin-bottom: 1.5rem;">
+          <h4 style="font-size: 1.25rem;">${produto.nome}</h4>
+        </div>
+        
+        <div style="margin-bottom: 1.5rem;">
+          <label class="form-label" style="text-align: center; margin-bottom: 0.75rem;">Adicionar Quantidade Rápida</label>
+          <div style="display: flex; gap: 0.5rem; justify-content: center; flex-wrap: wrap;">
+            <button type="button" class="btn btn-sm btn-secondary" onclick="producaoModule.somarInputModal(0.500, 3)">+ 500g</button>
+            <button type="button" class="btn btn-sm btn-secondary" onclick="producaoModule.somarInputModal(1.000, 3)">+ 1 KG</button>
+            <button type="button" class="btn btn-sm btn-secondary" onclick="producaoModule.somarInputModal(5.000, 3)">+ 5 KG</button>
+            <button type="button" class="btn btn-sm btn-secondary" onclick="producaoModule.somarInputModal(10.000, 3)">+ 10 KG</button>
+            <button type="button" class="btn btn-sm btn-secondary" onclick="producaoModule.somarInputModal(20.000, 3)">+ 20 KG</button>
+          </div>
+          <div style="text-align: center; margin-top: 0.75rem;">
+            <button type="button" class="btn btn-sm btn-ghost" onclick="document.getElementById('input-qtd-modal').value=''; document.getElementById('input-qtd-modal').focus();">
+              🔄 Zerar Volume
+            </button>
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label" style="text-align: center;">Total a Enviar (em KG) *</label>
+          <input type="number" step="0.001" min="0.001" name="quantidade" id="input-qtd-modal" class="form-input" style="font-size: 2rem; text-align: center; font-weight: 800; color: var(--primary); height: auto;" required autofocus placeholder="0.000">
+        </div>
+        
+        <div style="display: flex; gap: 1rem; margin-top: 1.5rem; border-top: 1px solid var(--border-color); padding-top: 1rem;">
+          <button type="button" class="btn btn-secondary w-full" onclick="modal.close()">Cancelar</button>
+          <button type="submit" class="btn btn-primary w-full">Adicionar à Caixa de Transporte</button>
+        </div>
+      </form>
+    `;
+    modal.open(content);
+  }
+
+  renderModalUnidade(produto) {
+    const content = `
+      <div class="card-header">
+        <h3 class="card-title">📦 Volume de Envio (Unidades)</h3>
+        <button class="btn btn-ghost btn-sm" onclick="modal.close()">✕</button>
+      </div>
+      <form onsubmit="producaoModule.confirmarAdicaoModal(event, '${produto.id}')">
+        <div style="text-align: center; margin-bottom: 1.5rem;">
+          <h4 style="font-size: 1.25rem;">${produto.nome}</h4>
+        </div>
+        
+        <div style="margin-bottom: 1.5rem;">
+          <label class="form-label" style="text-align: center; margin-bottom: 0.75rem;">Adicionar Quantidade Rápida</label>
+          <div style="display: flex; gap: 0.5rem; justify-content: center; flex-wrap: wrap;">
+            <button type="button" class="btn btn-sm btn-secondary" onclick="producaoModule.somarInputModal(10, 0)">+ 10 un</button>
+            <button type="button" class="btn btn-sm btn-secondary" onclick="producaoModule.somarInputModal(20, 0)">+ 20 un</button>
+            <button type="button" class="btn btn-sm btn-secondary" onclick="producaoModule.somarInputModal(50, 0)">+ 50 un</button>
+            <button type="button" class="btn btn-sm btn-secondary" onclick="producaoModule.somarInputModal(100, 0)">+ 100 un</button>
+            <button type="button" class="btn btn-sm btn-secondary" onclick="producaoModule.somarInputModal(200, 0)">+ 200 un</button>
+          </div>
+          <div style="text-align: center; margin-top: 0.75rem;">
+            <button type="button" class="btn btn-sm btn-ghost" onclick="document.getElementById('input-qtd-modal').value=''; document.getElementById('input-qtd-modal').focus();">
+              🔄 Zerar Volume
+            </button>
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label" style="text-align: center;">Total a Enviar (Unidades) *</label>
+          <input type="number" step="1" min="1" name="quantidade" id="input-qtd-modal" class="form-input" style="font-size: 2rem; text-align: center; font-weight: 800; color: var(--primary); height: auto;" required autofocus placeholder="0">
+        </div>
+        
+        <div style="display: flex; gap: 1rem; margin-top: 1.5rem; border-top: 1px solid var(--border-color); padding-top: 1rem;">
+          <button type="button" class="btn btn-secondary w-full" onclick="modal.close()">Cancelar</button>
+          <button type="submit" class="btn btn-primary w-full">Adicionar à Caixa de Transporte</button>
+        </div>
+      </form>
+    `;
+    modal.open(content);
+  }
+
+  somarInputModal(valorAdicional, casasDecimais) {
+    const input = document.getElementById('input-qtd-modal');
+    if (!input) return;
+    
+    let valorAtual = parseFloat(input.value) || 0;
+    let novoValor = valorAtual + valorAdicional;
+    
+    input.value = novoValor.toFixed(casasDecimais);
+    input.focus();
+  }
+
+  confirmarAdicaoModal(event, produtoId) {
+    event.preventDefault();
+    const inputQtd = event.target.quantidade.value;
+    const quantidade = parseFloat(inputQtd);
+    
+    const produto = this.produtos.find(p => p.id === produtoId);
+    
+    if (produto && quantidade > 0) {
+      this.inserirNoCarrinho(produto, quantidade);
+      modal.close();
+    }
+  }
+
+  // ==========================================
+  // CARRINHO E ENVIO
+  // ==========================================
+  inserirNoCarrinho(produto, quantidade) {
+    const existente = this.carrinho.find(i => i.produto.id === produto.id);
+    if (existente) {
+      existente.quantidade += quantidade;
+    } else {
+      this.carrinho.push({ produto, quantidade });
+    }
+    this.atualizarCarrinhoUI();
+  }
+
+  removerItem(index) {
+    this.carrinho.splice(index, 1);
+    this.atualizarCarrinhoUI();
+  }
+
+  limparCarrinho() {
+    this.carrinho = [];
+    this.atualizarCarrinhoUI();
+  }
+
+  atualizarCarrinhoUI() {
+    const div = document.getElementById('producao-carrinho');
+    if (div) div.innerHTML = this.renderCarrinho();
+    
+    const btnLimpar = document.querySelector('.pedido-acoes .btn-secondary');
+    const btnEnviar = document.querySelector('.pedido-acoes .btn-primary');
+    if(btnLimpar) btnLimpar.disabled = this.carrinho.length === 0;
+    if(btnEnviar) btnEnviar.disabled = this.carrinho.length === 0;
+  }
+
+  renderCarrinho() {
+    if (this.carrinho.length === 0) return `<div class="empty-state"><div class="empty-state-icone" style="font-size: 3rem;">📦</div><p>Caixa de envio vazia</p><small>Selecione os produtos ao lado</small></div>`;
+    
+    return this.carrinho.map((item, idx) => `
+      <div class="pedido-item" style="padding: 0.75rem; margin-bottom: 0.5rem; background: var(--bg-primary); border: 1px solid var(--border-color); border-radius: var(--border-radius);">
+        <div class="pedido-item-info">
+          <div style="font-weight: 700; font-size: 0.95rem; margin-bottom: 0.25rem;">${item.produto.nome}</div>
+          <div style="color: var(--primary); font-size: 0.85rem; font-weight: 800;">
+            ${item.quantidade} ${item.produto.tipo_preco === 'peso' ? 'KG' : 'UN'}
+          </div>
+        </div>
+        <button class="btn-ghost" style="color: var(--danger); font-size: 1.1rem; padding: 0.5rem; cursor: pointer; border: none; background: transparent;" onclick="producaoModule.removerItem(${idx})">✕</button>
+      </div>
+    `).join('');
+  }
+
+  renderHistorico() {
+    if (this.historico.length === 0) return `<div style="text-align: center; color: var(--text-muted); font-size: 0.85rem; margin-top: 1rem;">Nenhum envio recente.</div>`;
+    
+    return this.historico.map(h => {
+      const dataFormatada = new Date(h.created_at).toLocaleString('pt-PT', {day:'2-digit', month:'2-digit', hour:'2-digit', minute:'2-digit'});
+      const destino = this.unidadesDestino.find(u => u.id === h.observacao?.replace('Envio para ', ''))?.nome || 'Loja';
+      
+      return `
+        <div style="display: flex; justify-content: space-between; padding: 0.75rem 0; border-bottom: 1px dashed var(--border-color); font-size: 0.85rem;">
+          <div>
+            <span style="color: var(--success); font-weight: 800; background: rgba(39, 174, 96, 0.1); padding: 2px 6px; border-radius: 4px; margin-right: 5px;">
+              +${parseFloat(h.quantidade).toFixed(h.produto?.tipo_preco==='peso'?3:0)}
+            </span> 
+            <span style="font-weight: 600;">${h.produto?.nome || 'Produto apagado'}</span>
+          </div>
+          <div style="text-align: right; color: var(--text-muted);">
+            <div style="font-weight: 600; color: var(--text-primary);">${destino}</div>
+            <div style="font-size: 0.75rem;">${dataFormatada}</div>
+          </div>
         </div>
       `;
+    }).join('');
+  }
+
+  async confirmarEnvio() {
+    const destinoId = document.getElementById('select-destino').value;
+    if (!destinoId) {
+      alert('⚠️ Selecione a unidade de destino antes de despachar os produtos!');
+      return;
+    }
+    if (this.carrinho.length === 0) return;
+
+    const btn = event.target;
+    btn.disabled = true;
+    btn.innerHTML = 'A processar envio...';
+
+    try {
+      const userId = auth.getCurrentUser()?.id;
+
+      for (const item of this.carrinho) {
+        const { data: est } = await db.getClient()
+          .from('estoque')
+          .select('*')
+          .eq('produto_id', item.produto.id)
+          .eq('unidade_id', destinoId)
+          .single();
+
+        const qtdAtual = est ? parseFloat(est.quantidade) : 0;
+        const novaQtd = qtdAtual + parseFloat(item.quantidade);
+
+        if (est) {
+          await db.update('estoque', est.id, { quantidade: novaQtd, updated_by: userId });
+        } else {
+          await db.insert('estoque', [{
+            unidade_id: destinoId,
+            produto_id: item.produto.id,
+            quantidade: novaQtd,
+            updated_by: userId
+          }]);
+        }
+
+        await db.insert('estoque_movimentacao', [{
+          unidade_id: destinoId,
+          produto_id: item.produto.id,
+          tipo: 'entrada',
+          quantidade: item.quantidade,
+          quantidade_anterior: qtdAtual,
+          quantidade_nova: novaQtd,
+          usuario_id: userId,
+          observacao: `Recebido da Fábrica`
+        }]);
+        
+        await db.insert('estoque_movimentacao', [{
+          unidade_id: this.unidadeOrigemId,
+          produto_id: item.produto.id,
+          tipo: 'producao',
+          quantidade: item.quantidade,
+          usuario_id: userId,
+          observacao: `Envio para ${destinoId}`
+        }]);
+      }
+
+      alert('✅ Produtos despachados com sucesso para a Loja!');
+      this.carrinho = [];
+      await this.loadHistorico(); 
+      this.render(); 
+
+    } catch (error) {
+      alert('❌ Erro ao enviar: ' + error.message);
+      btn.disabled = false;
+      btn.innerHTML = '🚀 DESPACHAR PRODUTOS';
     }
   }
 }
