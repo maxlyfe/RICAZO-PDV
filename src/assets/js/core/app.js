@@ -89,25 +89,29 @@ class RicaZoApp {
     
     if (!user || !unidade || !navPerfis) return;
 
-    // Pega a view atual
     const urlParams = new URLSearchParams(window.location.search);
     const viewAtual = urlParams.get('view') || this.getDefaultView();
 
-    // REGRA DE UX: Se estiver no Dashboard Admin ou a Selecionar Unidade, ESCONDE OS BOTÕES.
+    // 1. REGRA: Esconder navegação operacional se estivermos no Admin ou a Selecionar Loja
     if (viewAtual === 'admin' || viewAtual === 'selecao-unidade') {
       navPerfis.style.display = 'none';
       return;
     }
 
+    // 2. REGRA: Carregar os botões a que o utilizador tem direito (Admin e Dev têm acesso a tudo)
     let perfisOperacionais = user.perfis.filter(p => ['caixa', 'pdv', 'producao'].includes(p));
-    
-    // Se for dev/admin E ESTIVER DENTRO DE UMA UNIDADE, mostra todos os botões operacionais
     if (auth.isDev() || auth.isAdmin()) {
       perfisOperacionais = ['caixa', 'pdv', 'producao'];
     }
 
+    // 3. REGRA: Se a unidade NÃO for fábrica, remove o botão de Produção
+    if (unidade.tipo !== 'fabrica') {
+      perfisOperacionais = perfisOperacionais.filter(p => p !== 'producao');
+    }
+
+    // Só renderiza se houver botões a mostrar
     if (perfisOperacionais.length > 0) {
-      const slug = auth.gerarSlug(unidade.nome); // Usar Slug limpo na navegação
+      const slug = auth.gerarSlug(unidade.nome); 
       
       navPerfis.innerHTML = perfisOperacionais.map(p => {
         const isAtivo = viewAtual === p;
@@ -132,12 +136,10 @@ class RicaZoApp {
     const view = urlParams.get('view') || this.getDefaultView();
     const unidadeSlug = urlParams.get('unidade');
 
-    // MÁGICA DA URL: Transforma o 'slug' (ex: padaria-centro) de volta na Unidade Original
     if (unidadeSlug) {
       const unidades = await auth.verificarUnidadesAcesso();
       let unidadeResolvida = unidades.find(u => auth.gerarSlug(u.nome) === unidadeSlug);
       
-      // Fallback para DEV (que pode aceder a qualquer unidade mesmo se recém criada)
       if (!unidadeResolvida && auth.isDev() && typeof unidadesModule !== 'undefined') {
         const todas = unidadesModule.getAll();
         unidadeResolvida = todas.find(u => auth.gerarSlug(u.nome) === unidadeSlug);
@@ -157,7 +159,6 @@ class RicaZoApp {
       return;
     }
 
-    // View renderiza com a unidade carregada (Sem exibir IDs na tela)
     container.innerHTML = this.getViewHTML(view);
 
     switch(view) {
@@ -165,7 +166,7 @@ class RicaZoApp {
         if (auth.isDev() || auth.isAdmin()) {
           const promises = [];
           if (typeof dashboardModule !== 'undefined') promises.push(dashboardModule.carregarEstatisticas());
-          if (typeof estoqueModule !== 'undefined') promises.push(estoqueModule.load()); // Injeção do Estoque
+          if (typeof estoqueModule !== 'undefined') promises.push(estoqueModule.load()); 
           if (typeof unidadesModule !== 'undefined') promises.push(unidadesModule.load());
           if (typeof usuariosModule !== 'undefined') promises.push(usuariosModule.load());
           if (typeof produtosModule !== 'undefined') promises.push(produtosModule.load());
@@ -220,7 +221,7 @@ class RicaZoApp {
     const unidades = auth.getUnidadesUsuario();
     if (unidades.length > 1) return 'selecao-unidade';
     if (unidades.length === 1) {
-      auth.entrarNaUnidade(unidades[0]); // Redireciona logo
+      auth.entrarNaUnidade(unidades[0]); 
       return null;
     }
     
@@ -283,32 +284,20 @@ class RicaZoApp {
   }
 
   formatTipoUnidade(tipo) {
-    const tipos = {
-      'loja': 'Loja',
-      'fabrica': 'Fábrica/Matriz',
-      'quiosque': 'Quiosque'
-    };
+    const tipos = { 'loja': 'Loja', 'fabrica': 'Fábrica/Matriz', 'quiosque': 'Quiosque' };
     return tipos[tipo] || tipo;
   }
 
   getViewHTML(view) {
     const unidade = auth.getUnidadeAtual();
-    const nomeUnidade = unidade ? unidade.nome : 'Unidade não selecionada';
-
     const views = {
       admin: () => {
-        if (!auth.isDev() && !auth.isAdmin()) {
-          return this.viewAcessoNegado();
-        }
+        if (!auth.isDev() && !auth.isAdmin()) return this.viewAcessoNegado();
         return `
           <div class="view-section animate-fade-in">
             <div id="admin-dashboard-stats">
-              <div class="text-center" style="padding: 2rem;">
-                <div class="spinner" style="margin: 0 auto 1rem;"></div>
-                <p>A calcular faturação...</p>
-              </div>
+              <div class="text-center" style="padding: 2rem;"><div class="spinner" style="margin: 0 auto 1rem;"></div><p>A calcular faturação...</p></div>
             </div>
-
             ${this.renderSection('estoque', '📦 Controlo Diário de Stock e Descartes', '', false)}
             ${this.renderSection('unidades', '🏪 Gerenciar Unidades', 'unidadesModule.openModal()', auth.podeGerenciarUnidades())}
             ${this.renderSection('usuarios', '👥 Gerenciar Utilizadores', 'usuariosModule.openModal()', true)}
@@ -316,75 +305,26 @@ class RicaZoApp {
           </div>
         `;
       },
-      
       'selecao-unidade': () => `
         <div class="view-section animate-fade-in" style="max-width: 1000px; margin: 0 auto;">
           <div class="selecao-header-compacto">
             <span class="selecao-icone">🏪</span>
-            <div>
-              <h2 class="selecao-titulo">Selecione uma Unidade</h2>
-              <p class="selecao-subtitulo">Escolha o local onde deseja operar</p>
-            </div>
+            <div><h2 class="selecao-titulo">Selecione uma Unidade</h2><p class="selecao-subtitulo">Escolha o local onde deseja operar</p></div>
           </div>
           <div id="selecao-unidade-list" class="selecao-lista">
-            <div class="text-center" style="grid-column: 1/-1; padding: 3rem;">
-              <div class="spinner" style="margin: 0 auto 1rem;"></div>
-              <p>A carregar unidades...</p>
-            </div>
+            <div class="text-center" style="grid-column: 1/-1; padding: 3rem;"><div class="spinner" style="margin: 0 auto 1rem;"></div><p>A carregar unidades...</p></div>
           </div>
         </div>
       `,
-      
-      producao: () => `
-        <div class="view-section animate-fade-in">
-          <div id="producao-content">
-            <div class="text-center" style="padding: 3rem;">
-              <div class="spinner" style="margin: 0 auto 1rem;"></div>
-              <p>A carregar módulo de produção...</p>
-            </div>
-          </div>
-        </div>
-      `,
-      
-      caixa: () => `
-        <div class="view-section animate-fade-in" style="padding: 0;">
-          <div id="caixa-content">
-            <div class="text-center" style="padding: 4rem;">
-              <div class="spinner" style="margin: 0 auto 1rem;"></div>
-              <p>A carregar Caixa...</p>
-            </div>
-          </div>
-        </div>
-      `,
-      
-      pdv: () => `
-        <div class="view-section animate-fade-in" style="padding: 0;">
-          <div id="pdv-content">
-            <div class="text-center" style="padding: 4rem;">
-              <div class="spinner" style="margin: 0 auto 1rem;"></div>
-              <p>A carregar PDV...</p>
-            </div>
-          </div>
-        </div>
-      `
+      producao: () => `<div class="view-section animate-fade-in"><div id="producao-content"><div class="text-center" style="padding: 3rem;"><div class="spinner" style="margin: 0 auto 1rem;"></div><p>A carregar módulo de produção...</p></div></div></div>`,
+      caixa: () => `<div class="view-section animate-fade-in" style="padding: 0;"><div id="caixa-content"><div class="text-center" style="padding: 4rem;"><div class="spinner" style="margin: 0 auto 1rem;"></div><p>A carregar Caixa...</p></div></div></div>`,
+      pdv: () => `<div class="view-section animate-fade-in" style="padding: 0;"><div id="pdv-content"><div class="text-center" style="padding: 4rem;"><div class="spinner" style="margin: 0 auto 1rem;"></div><p>A carregar PDV...</p></div></div></div>`
     };
-    
     return (views[view] || views.admin)();
   }
 
   viewAcessoNegado() {
-    return `
-      <div class="view-section animate-fade-in" style="text-align: center; padding: 4rem;">
-        <div style="font-size: 4rem; margin-bottom: 1rem;">🚫</div>
-        <h2 style="color: var(--danger); margin-bottom: 1rem;">Acesso Negado</h2>
-        <p style="color: var(--text-secondary); margin-bottom: 2rem;">
-          Não tem permissão para aceder a esta área do sistema.
-        </p>
-        <button class="btn btn-primary" onclick="auth.voltarParaHome()">
-          ← Voltar para a Home
-        </button>
-      </div>
-    `;
+    return `<div class="view-section animate-fade-in" style="text-align: center; padding: 4rem;"><div style="font-size: 4rem; margin-bottom: 1rem;">🚫</div><h2 style="color: var(--danger); margin-bottom: 1rem;">Acesso Negado</h2><button class="btn btn-primary" onclick="auth.voltarParaHome()">← Voltar para a Home</button></div>`;
   }
 
   renderSection(id, title, onClick, mostrarBotao = true) {
@@ -394,20 +334,13 @@ class RicaZoApp {
           <h3 class="card-title">${title}</h3>
           ${mostrarBotao ? `<button class="btn btn-primary btn-sm" onclick="${onClick}">+ Novo</button>` : ''}
         </div>
-        <div id="${id}-list" class="${id === 'unidades' || id === 'produtos' ? id + '-grid' : ''}" style="padding: ${id === 'estoque' ? '0' : '0 1rem 1rem 1rem'}; box-sizing: border-box; width: 100%;">
-          <div class="text-center" style="padding: 2rem;">
-            <div class="spinner" style="margin: 0 auto 1rem;"></div>
-            <p>A carregar...</p>
-          </div>
+        <div id="${id}-list" class="${id === 'unidades' || id === 'produtos' ? id + '-grid' : ''}">
+          <div class="text-center" style="padding: 2rem;"><div class="spinner" style="margin: 0 auto 1rem;"></div><p>A carregar...</p></div>
         </div>
       </div>
     `;
   }
 }
 
-// Inicializa
 let app;
-document.addEventListener('DOMContentLoaded', () => {
-  app = new RicaZoApp();
-  window.app = app;
-});
+document.addEventListener('DOMContentLoaded', () => { app = new RicaZoApp(); window.app = app; });
