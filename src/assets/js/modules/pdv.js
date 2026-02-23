@@ -111,7 +111,7 @@ class PdvModule {
           <div style="display: flex; gap: 1rem;">
             <button class="btn btn-secondary" onclick="pdvModule.abrirModalNovaMesa()">➕ Criar Mesa</button>
             <button class="btn btn-info" onclick="pdvModule.abrirMesa(null)" style="background: var(--info); color: white;">
-              🛒 Lançar Balcão (Rápido)
+              🛒 Lançar Balcão
             </button>
           </div>
         </div>
