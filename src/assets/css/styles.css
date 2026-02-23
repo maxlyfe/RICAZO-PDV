@@ -758,11 +758,61 @@ body { font-family: var(--font-family); background-color: var(--bg-primary); col
 .skip-link { position: absolute; top: -40px; left: 0; background: var(--primary); color: var(--text-inverse); padding: 0.5rem 1rem; z-index: 10000; transition: top 0.3s; }
 .skip-link:focus { top: 0; }
 
+/* ============================================
+   PRINT STYLES (CUPOM TÉRMICO 80mm)
+   ============================================ */
+
+@media screen {
+  #print-section { display: none !important; }
+}
+
 @media print {
-  .no-print, .dashboard-header, .theme-toggle, .btn-ghost, .pedido-acoes { display: none !important; }
-  body { background: white !important; color: black !important; }
-  .painel-pedido, .card { box-shadow: none !important; border: 1px solid #ddd !important; }
-  .pedido-item { break-inside: avoid; }
+  /* Oculta toda a interface do sistema */
+  body * { visibility: hidden; }
+  .dashboard, .modal-overlay, .modal-pagamento-overlay, .toast-container, .theme-toggle { 
+    display: none !important; 
+  }
+  
+  body {
+    background: white !important;
+    margin: 0; 
+    padding: 0;
+  }
+  
+  /* Container exclusivo para o ticket */
+  #print-section {
+    display: block !important;
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 80mm; /* Tamanho padrão de bobina térmica */
+    padding: 0;
+    margin: 0;
+    color: #000;
+    font-family: 'Courier New', Courier, monospace; /* Fonte ideal para térmica */
+    font-size: 12px;
+  }
+
+  /* Torna os elementos do ticket visíveis */
+  #print-section * { visibility: visible; }
+
+  /* Estilização do Cupom */
+  .ticket-header { text-align: center; margin-bottom: 10px; }
+  .ticket-title { font-size: 18px; font-weight: bold; margin-bottom: 5px; text-transform: uppercase;}
+  .ticket-info { font-size: 12px; line-height: 1.3; }
+  .ticket-divider { border-top: 1px dashed #000; margin: 8px 0; }
+  
+  .ticket-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+  .ticket-table th { border-bottom: 1px dashed #000; padding-bottom: 4px; }
+  .ticket-table th, .ticket-table td { text-align: left; vertical-align: top; padding: 3px 0; }
+  .ticket-table th:last-child, .ticket-table td:last-child { text-align: right; }
+  
+  .ticket-totals { width: 100%; margin-top: 5px; font-size: 12px; }
+  .ticket-totals td { padding: 3px 0; }
+  .ticket-totals td:last-child { text-align: right; }
+  .ticket-totals .bold { font-weight: bold; font-size: 14px;}
+  
+  .ticket-footer { text-align: center; margin-top: 15px; font-size: 11px; margin-bottom: 20px;}
 }
 
 @media (max-width: 1024px) {

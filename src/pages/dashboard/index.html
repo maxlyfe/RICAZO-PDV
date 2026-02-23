@@ -11,7 +11,7 @@
     <!-- Header -->
     <header class="dashboard-header">
       <!-- Logo clicável com ID para voltar a home -->
-      <div class="dashboard-logo" id="logo-ricazo" title="Voltar para Home">
+      <div class="dashboard-logo" id="logo-ricazo" title="Voltar para a Home">
         <span style="font-size: 2rem;">🥖</span>
         <span>RicaZo</span>
       </div>
@@ -26,7 +26,7 @@
         <div class="user-info">
           <div class="user-avatar" id="user-avatar">U</div>
           <div class="user-details">
-            <span class="user-name" id="user-name">Usuário</span>
+            <span class="user-name" id="user-name">Utilizador</span>
             <span class="user-role" id="user-role">Perfil</span>
           </div>
           <div id="user-perfis" style="margin-left: 1rem; display: flex; gap: 0.5rem;"></div>
@@ -45,6 +45,9 @@
     </main>
   </div>
 
+  <!-- BIBLIOTECA DE GRÁFICOS (Adicionado) -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
   <!-- Scripts na ordem correta -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   
@@ -60,10 +63,13 @@
   <script src="/src/assets/js/utils/modal.js"></script>
   
   <!-- Modules -->
+  <script src="/src/assets/js/modules/dashboard.js"></script>
   <script src="/src/assets/js/modules/unidades.js"></script>
   <script src="/src/assets/js/modules/usuarios.js"></script>
   <script src="/src/assets/js/modules/produtos.js"></script>
   <script src="/src/assets/js/modules/producao.js"></script>
+  <script src="/src/assets/js/modules/pdv.js"></script>
+  <script src="/src/assets/js/modules/caixa.js"></script>
   
   <!-- App -->
   <script src="/src/assets/js/core/app.js"></script>

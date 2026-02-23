@@ -6,7 +6,7 @@ class AuthSystem {
   constructor() {
     this.currentUser = null;
     this.session = null;
-    this.unidadesUsuario = []; // Cache das unidades do usuário
+    this.unidadesUsuario = []; // Cache das unidades do utilizador
     this.init();
   }
 
@@ -45,7 +45,7 @@ class AuthSystem {
   async login(username, password) {
     try {
       if (!username || !password) {
-        throw new Error('Usuário e senha são obrigatórios');
+        throw new Error('Utilizador e senha são obrigatórios');
       }
 
       if (db.isConnected()) {
@@ -69,7 +69,7 @@ class AuthSystem {
       .single();
 
     if (error || !usuario) {
-      throw new Error('Usuário ou senha incorretos');
+      throw new Error('Utilizador ou senha incorretos');
     }
 
     let unidadesAcesso = [];
@@ -94,7 +94,6 @@ class AuthSystem {
       ativo: usuario.ativo
     };
 
-    // CORREÇÃO: DEV carrega DADOS COMPLETOS (*) de todas as unidades
     if (userData.perfis.includes('dev')) {
       const { data: todasUnidades } = await db.getClient()
         .from('unidades')
@@ -146,7 +145,7 @@ class AuthSystem {
       return { success: true, user: devUser, unidades: [] };
     }
 
-    throw new Error('Usuário ou senha incorretos');
+    throw new Error('Utilizador ou senha incorretos');
   }
 
   async verificarUnidadesAcesso() {
@@ -171,6 +170,27 @@ class AuthSystem {
     return this.unidadesUsuario;
   }
 
+  // ===============================================
+  // GESTÃO DE URLs AMIGÁVEIS (SLUGS)
+  // ===============================================
+  gerarSlug(texto) {
+    if (!texto) return '';
+    return texto.toString().toLowerCase()
+      .normalize('NFD').replace(/[\u0300-\u036f]/g, "") // Remove acentos
+      .replace(/\s+/g, '-') // Substitui espaços por traços
+      .replace(/[^\w\-]+/g, '') // Remove caracteres especiais
+      .replace(/\-\-+/g, '-') // Evita traços duplicados
+      .replace(/^-+/, '') // Remove traço do início
+      .replace(/-+$/, ''); // Remove traço do fim
+  }
+
+  setUnidadeAtual(unidade) {
+    localStorage.setItem('ricazo_unidade_atual', JSON.stringify(unidade));
+  }
+
+  // ===============================================
+  // REDIRECIONAMENTOS OTIMIZADOS
+  // ===============================================
   async redirectByPerfil() {
     if (!this.currentUser) {
       window.location.href = '/src/pages/login/';
@@ -180,51 +200,52 @@ class AuthSystem {
     const perfis = this.currentUser.perfis;
     const unidades = await this.verificarUnidadesAcesso();
 
-    if ((perfis.includes('dev') || perfis.includes('admin')) && unidades.length === 0) {
-      window.location.href = '/src/pages/dashboard/?view=admin';
-      return;
-    }
-
+    // REGRA 1: DEV ou ADMIN -> Sempre Admin
     if (perfis.includes('dev') || perfis.includes('admin')) {
       window.location.href = '/src/pages/dashboard/?view=admin';
       return;
     }
 
+    // Validação de segurança
     if (unidades.length === 0) {
-      alert('❌ Você não tem acesso a nenhuma unidade. Contate o administrador.');
+      alert('❌ Não tem acesso a nenhuma unidade. Contacte o administrador.');
       this.logout();
       return;
     }
 
+    // REGRA 2: Operador com APENAS 1 unidade -> Entra direto
     if (unidades.length === 1) {
       this.entrarNaUnidade(unidades[0]);
       return;
     }
 
+    // REGRA 3: Operador com MÚLTIPLAS unidades -> Tela de seleção
     window.location.href = '/src/pages/dashboard/?view=selecao-unidade';
   }
 
   entrarNaUnidade(unidade) {
     const perfis = this.currentUser.perfis;
     
-    // Salva unidade atual com segurança
-    localStorage.setItem('ricazo_unidade_atual', JSON.stringify(unidade));
+    // Salva unidade com segurança
+    this.setUnidadeAtual(unidade);
+
+    // Gera a URL Limpa
+    const unidadeSlug = this.gerarSlug(unidade.nome);
     
-    // Roteamento inteligente
+    // Roteamento de perfil com URL limpa
     if (unidade.tipo === 'fabrica') {
-      window.location.href = `/src/pages/dashboard/?view=producao&unidade=${unidade.id}`;
+      window.location.href = `/src/pages/dashboard/?view=producao&unidade=${unidadeSlug}`;
     } else if (perfis.includes('caixa')) {
-      window.location.href = `/src/pages/dashboard/?view=caixa&unidade=${unidade.id}`;
+      window.location.href = `/src/pages/dashboard/?view=caixa&unidade=${unidadeSlug}`;
     } else if (perfis.includes('pdv')) {
-      window.location.href = `/src/pages/dashboard/?view=pdv&unidade=${unidade.id}`;
+      window.location.href = `/src/pages/dashboard/?view=pdv&unidade=${unidadeSlug}`;
     } else if (perfis.includes('producao')) {
-      window.location.href = `/src/pages/dashboard/?view=producao&unidade=${unidade.id}`;
+      window.location.href = `/src/pages/dashboard/?view=producao&unidade=${unidadeSlug}`;
     } else if (perfis.includes('dev') || perfis.includes('admin')) {
-      // DEV e Admin vão para o Admin da unidade (visão geral)
-      window.location.href = `/src/pages/dashboard/?view=admin&unidade=${unidade.id}`;
+      window.location.href = `/src/pages/dashboard/?view=admin`;
     } else {
       const perfilPrincipal = perfis[0] || 'admin';
-      window.location.href = `/src/pages/dashboard/?view=${perfilPrincipal}&unidade=${unidade.id}`;
+      window.location.href = `/src/pages/dashboard/?view=${perfilPrincipal}&unidade=${unidadeSlug}`;
     }
   }
 
@@ -233,24 +254,7 @@ class AuthSystem {
       window.location.href = '/src/pages/login/';
       return;
     }
-
-    const perfis = this.currentUser.perfis;
-    
-    if (perfis.includes('dev') || perfis.includes('admin')) {
-      window.location.href = '/src/pages/dashboard/?view=admin';
-      return;
-    }
-
-    const unidadeAtual = localStorage.getItem('ricazo_unidade_atual');
-    if (unidadeAtual) {
-      const unidade = JSON.parse(unidadeAtual);
-      if (unidade && unidade.nome) {
-        this.entrarNaUnidade(unidade);
-        return;
-      }
-    }
-
-    this.redirectByPerfil();
+    this.redirectByPerfil(); // Usa a lógica inteligente padronizada
   }
 
   logout() {

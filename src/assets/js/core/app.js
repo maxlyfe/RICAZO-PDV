@@ -21,15 +21,13 @@ class RicaZoApp {
     }
 
     this.setupEventListeners();
-    this.loadUserInfo();
-    await this.loadView();
+    await this.loadView(); // Load View trata a Unidade via URL
+    this.loadUserInfo();   // User info carrega depois para exibir a Unidade certa
   }
 
   setupEventListeners() {
-    // Logout
     document.getElementById('btn-logout')?.addEventListener('click', () => auth.logout());
     
-    // Tema
     const themeToggle = document.getElementById('theme-toggle');
     if (themeToggle) {
       themeToggle.addEventListener('click', () => {
@@ -39,7 +37,6 @@ class RicaZoApp {
       themeToggle.textContent = auth.getTheme() === 'dark' ? '☀️' : '🌙';
     }
 
-    // Logo RicaZo volta para home
     const logo = document.getElementById('logo-ricazo');
     if (logo) {
       logo.style.cursor = 'pointer';
@@ -67,18 +64,21 @@ class RicaZoApp {
       ).join('');
     }
 
-    // Mostra unidade atual clicável no header
     const unidadeAtual = auth.getUnidadeAtual();
     const unidadeInfo = document.getElementById('unidade-atual');
-    if (unidadeInfo && unidadeAtual) {
+    
+    if (unidadeAtual && !unidadeAtual.nome) {
+      localStorage.removeItem('ricazo_unidade_atual');
+    } else if (unidadeInfo && unidadeAtual) {
       unidadeInfo.innerHTML = `🏪 ${unidadeAtual.nome} <small style="margin-left: 5px; opacity: 0.7;">▼</small>`;
       unidadeInfo.style.display = 'flex';
+      unidadeInfo.style.cursor = 'pointer';
+      unidadeInfo.title = 'Trocar de unidade';
       unidadeInfo.onclick = () => {
         window.location.href = '/src/pages/dashboard/?view=selecao-unidade';
       };
     }
 
-    // Renderiza botões de navegação rápida se usuário tiver Caixa + PDV + Producao
     this.renderNavegacaoPerfis();
   }
 
@@ -91,15 +91,15 @@ class RicaZoApp {
 
     const perfisOperacionais = user.perfis.filter(p => ['caixa', 'pdv', 'producao'].includes(p));
     
-    // Só exibe se tiver mais de um perfil operacional e estiver dentro de uma unidade
     if (perfisOperacionais.length > 1) {
       const viewAtual = new URLSearchParams(window.location.search).get('view');
+      const slug = auth.gerarSlug(unidade.nome); // Usar Slug limpo na navegação
       
       navPerfis.innerHTML = perfisOperacionais.map(p => {
         const isAtivo = viewAtual === p;
         const icones = { caixa: '🖥️', pdv: '📱', producao: '🏭' };
         return `
-          <a href="/src/pages/dashboard/?view=${p}&unidade=${unidade.id}" 
+          <a href="/src/pages/dashboard/?view=${p}&unidade=${slug}" 
              class="nav-perfil-item ${isAtivo ? 'ativo' : ''}">
             ${icones[p]} ${CONFIG.PERFIS_LABELS[p]}
           </a>
@@ -113,42 +113,58 @@ class RicaZoApp {
   async loadView() {
     const urlParams = new URLSearchParams(window.location.search);
     const view = urlParams.get('view') || this.getDefaultView();
-    const unidadeId = urlParams.get('unidade');
+    const unidadeSlug = urlParams.get('unidade');
+
+    // MÁGICA DA URL: Transforma o 'slug' (ex: padaria-centro) de volta na Unidade Original
+    if (unidadeSlug) {
+      const unidades = await auth.verificarUnidadesAcesso();
+      let unidadeResolvida = unidades.find(u => auth.gerarSlug(u.nome) === unidadeSlug);
+      
+      // Fallback para DEV (que pode aceder a qualquer unidade mesmo se recém criada)
+      if (!unidadeResolvida && auth.isDev() && typeof unidadesModule !== 'undefined') {
+        const todas = unidadesModule.getAll();
+        unidadeResolvida = todas.find(u => auth.gerarSlug(u.nome) === unidadeSlug);
+      }
+
+      if (unidadeResolvida) {
+        auth.setUnidadeAtual(unidadeResolvida);
+      }
+    }
 
     const container = document.getElementById('dashboard-content');
     if (!container) return;
 
-    // Verifica permissões de acesso à view
     if (!this.podeAcessarView(view)) {
-      alert('❌ Você não tem permissão para acessar esta área');
+      alert('❌ Não tem permissão para aceder a esta área.');
       auth.voltarParaHome();
       return;
     }
 
-    container.innerHTML = this.getViewHTML(view, unidadeId);
+    // View renderiza com a unidade carregada (Sem exibir IDs na tela)
+    container.innerHTML = this.getViewHTML(view);
 
-    // Carrega dados específicos da view
     switch(view) {
       case 'admin':
         if (auth.isDev() || auth.isAdmin()) {
-          await Promise.all([
-            unidadesModule.load(),
-            usuariosModule.load(),
-            produtosModule.load()
-          ]);
+          const promises = [];
+          if (typeof dashboardModule !== 'undefined') promises.push(dashboardModule.carregarEstatisticas());
+          if (typeof unidadesModule !== 'undefined') promises.push(unidadesModule.load());
+          if (typeof usuariosModule !== 'undefined') promises.push(usuariosModule.load());
+          if (typeof produtosModule !== 'undefined') promises.push(produtosModule.load());
+          await Promise.all(promises);
         }
         break;
       case 'selecao-unidade':
         await this.carregarSelecaoUnidade();
         break;
       case 'producao':
-        await producaoModule.init();
+        if (typeof producaoModule !== 'undefined') await producaoModule.init();
         break;
       case 'caixa':
-        await this.carregarCaixa(unidadeId);
+        if (typeof caixaModule !== 'undefined') await caixaModule.init();
         break;
       case 'pdv':
-        await this.carregarPDV(unidadeId);
+        if (typeof pdvModule !== 'undefined') await pdvModule.init();
         break;
     }
   }
@@ -186,7 +202,7 @@ class RicaZoApp {
     const unidades = auth.getUnidadesUsuario();
     if (unidades.length > 1) return 'selecao-unidade';
     if (unidades.length === 1) {
-      auth.entrarNaUnidade(unidades[0]);
+      auth.entrarNaUnidade(unidades[0]); // Redireciona logo
       return null;
     }
     
@@ -204,7 +220,7 @@ class RicaZoApp {
         <div class="text-center" style="padding: 3rem; color: var(--danger);">
           <p>❌ Nenhuma unidade disponível</p>
           <p style="font-size: 0.875rem; margin-top: 0.5rem;">
-            Contate o administrador do sistema
+            Contacte o administrador do sistema.
           </p>
         </div>
       `;
@@ -234,10 +250,17 @@ class RicaZoApp {
   }
 
   entrarUnidade(unidadeId) {
-    const unidades = auth.getUnidadesUsuario();
-    const unidade = unidades.find(u => u.id === unidadeId);
-    if (unidade) {
+    let unidades = auth.getUnidadesUsuario();
+    let unidade = unidades.find(u => u.id === unidadeId);
+    
+    if ((!unidade || !unidade.nome) && typeof unidadesModule !== 'undefined') {
+      unidade = unidadesModule.getAll().find(u => u.id === unidadeId);
+    }
+
+    if (unidade && unidade.nome) {
       auth.entrarNaUnidade(unidade);
+    } else {
+      alert('❌ Erro: Dados da unidade não encontrados. Tente recarregar a página (F5).');
     }
   }
 
@@ -250,15 +273,7 @@ class RicaZoApp {
     return tipos[tipo] || tipo;
   }
 
-  async carregarCaixa(unidadeId) {
-    console.log('Carregando caixa da unidade:', unidadeId);
-  }
-
-  async carregarPDV(unidadeId) {
-    console.log('Carregando PDV da unidade:', unidadeId);
-  }
-
-  getViewHTML(view, unidadeId) {
+  getViewHTML(view) {
     const unidade = auth.getUnidadeAtual();
     const nomeUnidade = unidade ? unidade.nome : 'Unidade não selecionada';
 
@@ -269,8 +284,15 @@ class RicaZoApp {
         }
         return `
           <div class="view-section animate-fade-in">
+            <div id="admin-dashboard-stats">
+              <div class="text-center" style="padding: 2rem;">
+                <div class="spinner" style="margin: 0 auto 1rem;"></div>
+                <p>A calcular faturação...</p>
+              </div>
+            </div>
+
             ${this.renderSection('unidades', '🏪 Gerenciar Unidades', 'unidadesModule.openModal()', auth.podeGerenciarUnidades())}
-            ${this.renderSection('usuarios', '👥 Gerenciar Usuários', 'usuariosModule.openModal()', true)}
+            ${this.renderSection('usuarios', '👥 Gerenciar Utilizadores', 'usuariosModule.openModal()', true)}
             ${this.renderSection('produtos', '🥖 Gerenciar Produtos', 'produtosModule.openModal()', true)}
           </div>
         `;
@@ -288,7 +310,7 @@ class RicaZoApp {
           <div id="selecao-unidade-list" class="selecao-lista">
             <div class="text-center" style="grid-column: 1/-1; padding: 3rem;">
               <div class="spinner" style="margin: 0 auto 1rem;"></div>
-              <p>Carregando unidades...</p>
+              <p>A carregar unidades...</p>
             </div>
           </div>
         </div>
@@ -299,36 +321,30 @@ class RicaZoApp {
           <div id="producao-content">
             <div class="text-center" style="padding: 3rem;">
               <div class="spinner" style="margin: 0 auto 1rem;"></div>
-              <p>Carregando módulo de produção...</p>
+              <p>A carregar módulo de produção...</p>
             </div>
           </div>
         </div>
       `,
       
       caixa: () => `
-        <div class="view-section animate-fade-in">
-          <div class="card">
-            <div class="card-header">
-              <h2 class="card-title">🖥️ Caixa</h2>
-              <span class="perfil-badge perfil-caixa">${nomeUnidade}</span>
+        <div class="view-section animate-fade-in" style="padding: 0;">
+          <div id="caixa-content">
+            <div class="text-center" style="padding: 4rem;">
+              <div class="spinner" style="margin: 0 auto 1rem;"></div>
+              <p>A carregar Caixa...</p>
             </div>
-            <p style="padding: 2rem; text-align: center; color: var(--text-muted);">
-              Módulo de caixa em desenvolvimento...
-            </p>
           </div>
         </div>
       `,
       
       pdv: () => `
-        <div class="view-section animate-fade-in">
-          <div class="card">
-            <div class="card-header">
-              <h2 class="card-title">📱 PDV / Garçom</h2>
-              <span class="perfil-badge perfil-pdv">${nomeUnidade}</span>
+        <div class="view-section animate-fade-in" style="padding: 0;">
+          <div id="pdv-content">
+            <div class="text-center" style="padding: 4rem;">
+              <div class="spinner" style="margin: 0 auto 1rem;"></div>
+              <p>A carregar PDV...</p>
             </div>
-            <p style="padding: 2rem; text-align: center; color: var(--text-muted);">
-              Módulo de PDV em desenvolvimento...
-            </p>
           </div>
         </div>
       `
@@ -343,10 +359,10 @@ class RicaZoApp {
         <div style="font-size: 4rem; margin-bottom: 1rem;">🚫</div>
         <h2 style="color: var(--danger); margin-bottom: 1rem;">Acesso Negado</h2>
         <p style="color: var(--text-secondary); margin-bottom: 2rem;">
-          Você não tem permissão para acessar esta área do sistema.
+          Não tem permissão para aceder a esta área do sistema.
         </p>
         <button class="btn btn-primary" onclick="auth.voltarParaHome()">
-          ← Voltar para Home
+          ← Voltar para a Home
         </button>
       </div>
     `;
@@ -362,7 +378,7 @@ class RicaZoApp {
         <div id="${id}-list" class="${id === 'unidades' || id === 'produtos' ? id + '-grid' : ''}">
           <div class="text-center" style="padding: 2rem;">
             <div class="spinner" style="margin: 0 auto 1rem;"></div>
-            <p>Carregando...</p>
+            <p>A carregar...</p>
           </div>
         </div>
       </div>
@@ -370,6 +386,7 @@ class RicaZoApp {
   }
 }
 
+// Inicializa
 let app;
 document.addEventListener('DOMContentLoaded', () => {
   app = new RicaZoApp();
