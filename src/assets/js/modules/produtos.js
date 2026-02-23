@@ -5,15 +5,9 @@
 class ProdutosModule {
   constructor() {
     this.produtos = [];
-    this.unidades = [];
   }
 
-  async init() {
-    this.unidades = unidadesModule.getAll();
-    await this.load();
-  }
-
-    async load() {
+  async load() {
     try {
       const { data, error } = await db.getClient()
         .from('produtos')
@@ -26,8 +20,6 @@ class ProdutosModule {
       
       this.produtos = data || [];
       this.render();
-      // REMOVA ou comente esta linha: this.updateStats();
-      
     } catch (error) {
       console.error('Erro ao carregar produtos:', error);
       this.renderError(error.message);
@@ -55,29 +47,34 @@ class ProdutosModule {
 
   cardHTML(produto) {
     const precoBase = parseFloat(produto.preco_base).toFixed(2);
-    const tipoLabel = produto.tipo_preco === 'peso' ? '⚖️ Por KG' : '📦 Por Unidade';
+    const tipoLabel = produto.tipo_preco === 'peso' ? '⚖️ KG' : '📦 UN';
     
     return `
-      <div class="produto-card">
-        <div class="produto-imagem">
-          ${produto.imagem_url 
-            ? `<img src="${produto.imagem_url}" alt="${produto.nome}" onerror="this.src='https://via.placeholder.com/80?text=🥖'">`
-            : `<div class="produto-sem-imagem">🥖</div>`
-          }
+      <div class="produto-card-modern">
+        <div class="produto-card-top">
+          <div class="produto-img-wrapper">
+            ${produto.imagem_url 
+              ? `<img src="${produto.imagem_url}" alt="${produto.nome}" onerror="this.src='https://via.placeholder.com/80?text=🥖'">`
+              : `<div class="produto-img-placeholder">🥖</div>`
+            }
+          </div>
+          <div class="produto-info-modern">
+            <h3 class="produto-nome-modern" title="${produto.nome}">${produto.nome}</h3>
+            ${produto.descricao ? `<p class="produto-desc-modern">${produto.descricao}</p>` : ''}
+            <div class="produto-tipo-pill">${tipoLabel}</div>
+          </div>
         </div>
-        <div class="produto-info">
-          <div class="produto-nome">${produto.nome}</div>
-          <div class="produto-tipo">${tipoLabel}</div>
-          <div class="produto-preco">R$ ${precoBase}</div>
-          ${produto.descricao ? `<div class="produto-desc">${produto.descricao}</div>` : ''}
-        </div>
-        <div class="produto-acoes">
-          <button class="btn btn-sm btn-secondary" onclick="produtosModule.editar('${produto.id}')">
-            ✏️ Editar
-          </button>
-          <button class="btn btn-sm btn-danger" onclick="produtosModule.ocultar('${produto.id}')">
-            🗑️ Ocultar
-          </button>
+        
+        <div class="produto-card-bottom">
+          <div class="produto-preco-modern">R$ ${precoBase}</div>
+          <div class="produto-acoes-modern">
+            <button class="btn-action-ghost edit" onclick="produtosModule.editar('${produto.id}')" title="Editar Produto">
+              ✏️ Editar
+            </button>
+            <button class="btn-action-ghost delete" onclick="produtosModule.ocultar('${produto.id}')" title="Ocultar Produto">
+              🗑️ Ocultar
+            </button>
+          </div>
         </div>
       </div>
     `;
@@ -90,7 +87,6 @@ class ProdutosModule {
     }
   }
 
-    // Substitua o método openModal() por este:
   openModal(produtoId = null) {
     const unidades = unidadesModule.getAll();
     if (unidades.length === 0) {
@@ -98,13 +94,13 @@ class ProdutosModule {
       return;
     }
 
-    const isEdicao = produtoId !== null;
+    const isEdicao = produtoId && produtoId !== '';
     const produto = isEdicao ? this.produtos.find(p => p.id === produtoId) : null;
 
     const unidadesCheckboxes = unidades.map(u => {
       const precoExistente = produto?.precos?.find(p => p.unidade_id === u.id);
       const precoValor = precoExistente ? precoExistente.preco : '';
-      const checked = isEdicao ? produto?.precos?.some(p => p.unidade_id === u.id) : 'checked';
+      const checked = isEdicao ? !!precoExistente : true;
       
       return `
         <label class="unidade-checkbox">
@@ -157,23 +153,27 @@ class ProdutosModule {
     `;
     modal.open(content);
     
-    // Atualiza label do preço base se for edição
     if (produto) {
       this.toggleTipo(produto.tipo_preco);
     }
   }
 
-  // Adicione este método:
-  editar(id) {
-    this.openModal(id);
+  preencherPrecos(valor) {
+    document.querySelectorAll('input[name^="preco_"]').forEach(input => {
+      if (!input.value) input.value = valor;
+    });
   }
 
-  // Atualize o método salvar():
-    async salvar(event, produtoId = null) {
+  toggleTipo(tipo) {
+    const label = document.querySelector('input[name="preco_base"]').previousElementSibling;
+    if (label) {
+      label.textContent = tipo === 'peso' ? 'Preço Base * (R$ por KG)' : 'Preço Base * (R$ por Unidade)';
+    }
+  }
+
+  async salvar(event, produtoId = null) {
     event.preventDefault();
     const form = event.target;
-    
-    // Verifica se é edição (tem ID válido) ou criação
     const isEdicao = produtoId && produtoId !== '';
     
     const unidadesSelecionadas = Array.from(form.querySelectorAll('input[name="unidades"]:checked')).map(cb => cb.value);
@@ -195,10 +195,7 @@ class ProdutosModule {
 
     try {
       if (isEdicao) {
-        // UPDATE
         await db.update('produtos', produtoId, dados);
-        
-        // Remove preços antigos e reinsere
         await db.getClient().from('produto_precos').delete().eq('produto_id', produtoId);
         
         const precosInsert = unidadesSelecionadas.map(unidadeId => {
@@ -212,15 +209,10 @@ class ProdutosModule {
         });
         
         await db.insert('produto_precos', precosInsert);
-        
         alert('✅ Produto atualizado!');
 
       } else {
-        // INSERT - criação nova
-        const [novoProduto] = await db.insert('produtos', [{
-          ...dados,
-          created_by: auth.getCurrentUser()?.id
-        }]);
+        const [novoProduto] = await db.insert('produtos', [{...dados, created_by: auth.getCurrentUser()?.id}]);
 
         const precosInsert = unidadesSelecionadas.map(unidadeId => {
           const precoEspecifico = form[`preco_${unidadeId}`].value;
@@ -234,7 +226,6 @@ class ProdutosModule {
 
         await db.insert('produto_precos', precosInsert);
 
-        // Inicializa estoque zero
         const estoqueInsert = unidadesSelecionadas.map(unidadeId => ({
           unidade_id: unidadeId,
           produto_id: novoProduto.id,
@@ -254,21 +245,8 @@ class ProdutosModule {
     }
   }
 
-  preencherPrecos(valor) {
-    document.querySelectorAll('input[name^="preco_"]').forEach(input => {
-      if (!input.value) input.value = valor;
-    });
-  }
-
-  toggleTipo(tipo) {
-    const label = document.querySelector('input[name="preco_base"]').previousElementSibling;
-    label.textContent = tipo === 'peso' ? 'Preço Base * (R$ por KG)' : 'Preço Base * (R$ por Unidade)';
-  }
-
-
   async ocultar(id) {
     if (!confirm('Tem certeza que deseja ocultar este produto?')) return;
-    
     try {
       await db.update('produtos', id, { visivel: false, ativo: false });
       await this.load();
@@ -276,6 +254,10 @@ class ProdutosModule {
     } catch (error) {
       alert('❌ Erro: ' + error.message);
     }
+  }
+
+  editar(id) {
+    this.openModal(id);
   }
 
   getAll() {

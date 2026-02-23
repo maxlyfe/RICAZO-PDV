@@ -72,7 +72,6 @@ class AuthSystem {
       throw new Error('Usuário ou senha incorretos');
     }
 
-    // Busca unidades ativas do usuário
     let unidadesAcesso = [];
     if (usuario.unidades && usuario.unidades.length > 0) {
       const unidadeIds = usuario.unidades.map(u => u.unidade_id);
@@ -95,11 +94,11 @@ class AuthSystem {
       ativo: usuario.ativo
     };
 
-    // Se for DEV, adiciona acesso a todas unidades
+    // CORREÇÃO: DEV carrega DADOS COMPLETOS (*) de todas as unidades
     if (userData.perfis.includes('dev')) {
       const { data: todasUnidades } = await db.getClient()
         .from('unidades')
-        .select('id')
+        .select('*') 
         .eq('ativo', true)
         .eq('visivel', true);
       userData.unidades_acesso = (todasUnidades || []).map(u => u.id);
@@ -150,10 +149,8 @@ class AuthSystem {
     throw new Error('Usuário ou senha incorretos');
   }
 
-  // NOVO: Verifica quantas unidades o usuário tem acesso
   async verificarUnidadesAcesso() {
     if (this.unidadesUsuario.length === 0 && this.currentUser) {
-      // Recarrega do banco se necessário
       if (this.isDev()) {
         const { data } = await db.getClient()
           .from('unidades')
@@ -174,7 +171,6 @@ class AuthSystem {
     return this.unidadesUsuario;
   }
 
-  // NOVO: Redirecionamento inteligente baseado em unidades
   async redirectByPerfil() {
     if (!this.currentUser) {
       window.location.href = '/src/pages/login/';
@@ -184,43 +180,37 @@ class AuthSystem {
     const perfis = this.currentUser.perfis;
     const unidades = await this.verificarUnidadesAcesso();
 
-    // DEV ou ADMIN sem unidades específicas → Dashboard Admin
     if ((perfis.includes('dev') || perfis.includes('admin')) && unidades.length === 0) {
       window.location.href = '/src/pages/dashboard/?view=admin';
       return;
     }
 
-    // DEV ou ADMIN com unidades → Dashboard Admin (eles veem tudo)
     if (perfis.includes('dev') || perfis.includes('admin')) {
       window.location.href = '/src/pages/dashboard/?view=admin';
       return;
     }
 
-    // Usuários operacionais (caixa, pdv, producao)
     if (unidades.length === 0) {
       alert('❌ Você não tem acesso a nenhuma unidade. Contate o administrador.');
       this.logout();
       return;
     }
 
-    // Se tem apenas 1 unidade → Vai direto
     if (unidades.length === 1) {
       this.entrarNaUnidade(unidades[0]);
       return;
     }
 
-    // Se tem múltiplas unidades → Tela de seleção
     window.location.href = '/src/pages/dashboard/?view=selecao-unidade';
   }
 
-  // NOVO: Entra em uma unidade específica
   entrarNaUnidade(unidade) {
     const perfis = this.currentUser.perfis;
     
-    // Salva unidade atual no localStorage
+    // Salva unidade atual com segurança
     localStorage.setItem('ricazo_unidade_atual', JSON.stringify(unidade));
     
-    // Redireciona baseado no tipo da unidade e perfil do usuário
+    // Roteamento inteligente
     if (unidade.tipo === 'fabrica') {
       window.location.href = `/src/pages/dashboard/?view=producao&unidade=${unidade.id}`;
     } else if (perfis.includes('caixa')) {
@@ -229,14 +219,15 @@ class AuthSystem {
       window.location.href = `/src/pages/dashboard/?view=pdv&unidade=${unidade.id}`;
     } else if (perfis.includes('producao')) {
       window.location.href = `/src/pages/dashboard/?view=producao&unidade=${unidade.id}`;
+    } else if (perfis.includes('dev') || perfis.includes('admin')) {
+      // DEV e Admin vão para o Admin da unidade (visão geral)
+      window.location.href = `/src/pages/dashboard/?view=admin&unidade=${unidade.id}`;
     } else {
-      // Fallback: vai para view baseada no primeiro perfil
       const perfilPrincipal = perfis[0] || 'admin';
       window.location.href = `/src/pages/dashboard/?view=${perfilPrincipal}&unidade=${unidade.id}`;
     }
   }
 
-  // NOVO: Volta para tela inicial apropriada ao perfil
   voltarParaHome() {
     if (!this.currentUser) {
       window.location.href = '/src/pages/login/';
@@ -245,21 +236,20 @@ class AuthSystem {
 
     const perfis = this.currentUser.perfis;
     
-    // DEV/Admin sempre volta para admin
     if (perfis.includes('dev') || perfis.includes('admin')) {
       window.location.href = '/src/pages/dashboard/?view=admin';
       return;
     }
 
-    // Verifica se tem unidade atual selecionada
     const unidadeAtual = localStorage.getItem('ricazo_unidade_atual');
     if (unidadeAtual) {
       const unidade = JSON.parse(unidadeAtual);
-      this.entrarNaUnidade(unidade);
-      return;
+      if (unidade && unidade.nome) {
+        this.entrarNaUnidade(unidade);
+        return;
+      }
     }
 
-    // Se não tem unidade atual, vai para seleção
     this.redirectByPerfil();
   }
 
@@ -291,7 +281,6 @@ class AuthSystem {
     return saved ? JSON.parse(saved) : null;
   }
 
-  // Hierarquia de permissões
   isDev() {
     return this.currentUser?.perfis.includes('dev') || false;
   }

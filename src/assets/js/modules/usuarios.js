@@ -30,59 +30,6 @@ class UsuariosModule {
     const container = document.getElementById('usuarios-list');
     if (!container) return;
 
-    if (this.usuarios.length === 0) {
-      container.innerHTML = `<div class="text-center" style="padding: 2rem; color: var(--text-muted);"><p>Nenhum usuário cadastrado</p></div>`;
-      return;
-    }
-
-    container.innerHTML = `
-      <div style="overflow-x: auto;">
-        <table style="width: 100%; border-collapse: collapse;">
-          <thead>
-            <tr style="border-bottom: 2px solid var(--border-color); text-align: left;">
-              <th style="padding: 0.75rem;">Nome</th>
-              <th style="padding: 0.75rem;">Username</th>
-              <th style="padding: 0.75rem;">Perfis</th>
-              <th style="padding: 0.75rem;">Unidades</th>
-              <th style="padding: 0.75rem; text-align: right;">Ações</th>
-            </tr>
-          </thead>
-          <tbody>
-            ${this.usuarios.map(u => this.rowHTML(u)).join('')}
-          </tbody>
-        </table>
-      </div>
-    `;
-  }
-
-  rowHTML(user) {
-    return `
-      <tr style="border-bottom: 1px solid var(--border-color);">
-        <td style="padding: 0.75rem; font-weight: 600;">${user.nome}</td>
-        <td style="padding: 0.75rem; color: var(--text-secondary);">${user.username}</td>
-        <td style="padding: 0.75rem;">
-          ${user.perfis.map(p => `<span class="perfil-badge perfil-${p.perfil}">${CONFIG.PERFIS_LABELS[p.perfil]}</span>`).join(' ')}
-        </td>
-        <td style="padding: 0.75rem;">
-          ${user.unidades?.length > 0 
-            ? user.unidades.map(u => u.unidade?.nome || 'Todas').join(', ')
-            : '<span style="color: var(--text-muted);">Todas</span>'
-          }
-        </td>
-        <td style="padding: 0.75rem; text-align: right;">
-          <button class="btn btn-sm btn-secondary" onclick="usuariosModule.editar('${user.id}')">
-            ✏️ Editar
-          </button>
-        </td>
-      </tr>
-    `;
-  }
-
-  render() {
-    const container = document.getElementById('usuarios-list');
-    if (!container) return;
-
-    // Filtra: DEVs só veem outros DEVs se forem DEV
     const usuariosVisiveis = auth.isDev() 
       ? this.usuarios 
       : this.usuarios.filter(u => !u.perfis.some(p => p.perfil === 'dev'));
@@ -139,14 +86,17 @@ class UsuariosModule {
     `;
   }
 
+  renderError(msg) {
+    const container = document.getElementById('usuarios-list');
+    if (container) container.innerHTML = `<p style="color: var(--danger); padding: 2rem;">❌ ${msg}</p>`;
+  }
+
   openModal() {
-    // Verifica se pode criar usuários
     if (!auth.hasPerfil('admin') && !auth.isDev()) {
       alert('❌ Sem permissão para criar usuários');
       return;
     }
 
-    // Filtra perfis disponíveis para criação
     const perfisDisponiveis = Object.entries(CONFIG.PERFIS_LABELS)
       .filter(([key]) => auth.podeCriarPerfil(key))
       .map(([key, label]) => `
@@ -181,7 +131,7 @@ class UsuariosModule {
 
         ${modal.formGroup('Unidades de Acesso', `
           <select name="unidades" class="form-input" multiple size="4" style="height: auto;">
-            <option value="">Todas as unidades</option>
+            <option value="">Todas as unidades (DEV/Admin)</option>
             ${unidadesOptions}
           </select>
           <small style="color: var(--text-muted);">Segure Ctrl para selecionar múltiplas</small>
@@ -191,16 +141,6 @@ class UsuariosModule {
       </form>
     `;
     modal.open(content);
-  }
-
-  editar(id) {
-    const usuario = this.usuarios.find(u => u.id === id);
-    
-    // Verifica se pode editar este usuário específico
-    if (!auth.podeGerenciarUsuario(usuario)) {
-      alert('❌ Você não tem permissão para editar este usuário');
-      return;
-    }
   }
 
   async salvar(event) {
@@ -223,16 +163,13 @@ class UsuariosModule {
     };
 
     try {
-      // 1. Cria usuário
       const [novoUsuario] = await db.insert('usuarios', [dados]);
 
-      // 2. Perfis
       await db.insert('usuario_perfis', perfisSelecionados.map(perfil => ({
         usuario_id: novoUsuario.id,
         perfil: perfil
       })));
 
-      // 3. Unidades
       if (unidadesSelecionadas.length > 0) {
         await db.insert('usuario_unidades', unidadesSelecionadas.map(uid => ({
           usuario_id: novoUsuario.id,
@@ -249,10 +186,14 @@ class UsuariosModule {
     }
   }
 
-    // SUBSTITUA o método editar() por este:
   editar(id) {
     const usuario = this.usuarios.find(u => u.id === id);
     if (!usuario) return;
+    
+    if (!auth.podeGerenciarUsuario(usuario)) {
+      alert('❌ Você não tem permissão para editar este usuário');
+      return;
+    }
 
     const unidadesOptions = unidadesModule.getAll().map(u => {
       const selecionado = usuario.unidades?.some(un => un.unidade_id === u.id);
@@ -306,7 +247,6 @@ class UsuariosModule {
     modal.open(content);
   }
 
-  // ADICIONE este método novo:
   async atualizar(event, id) {
     event.preventDefault();
     const form = event.target;
@@ -320,20 +260,17 @@ class UsuariosModule {
     }
 
     try {
-      // 1. Atualiza dados básicos
       const dados = { nome: form.nome.value.trim() };
       if (form.senha.value) dados.senha = form.senha.value;
       
       await db.update('usuarios', id, dados);
 
-      // 2. Atualiza perfis (remove todos e reinsere)
       await db.getClient().from('usuario_perfis').delete().eq('usuario_id', id);
       await db.insert('usuario_perfis', perfisSelecionados.map(perfil => ({
         usuario_id: id,
         perfil: perfil
       })));
 
-      // 3. Atualiza unidades
       await db.getClient().from('usuario_unidades').delete().eq('usuario_id', id);
       if (unidadesSelecionadas.length > 0) {
         await db.insert('usuario_unidades', unidadesSelecionadas.map(uid => ({

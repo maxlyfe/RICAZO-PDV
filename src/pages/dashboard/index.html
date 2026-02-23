@@ -10,15 +10,18 @@
   <div class="dashboard">
     <!-- Header -->
     <header class="dashboard-header">
-      <!-- NOVO: Logo clicável com ID -->
+      <!-- Logo clicável com ID para voltar a home -->
       <div class="dashboard-logo" id="logo-ricazo" title="Voltar para Home">
         <span style="font-size: 2rem;">🥖</span>
         <span>RicaZo</span>
       </div>
       
       <nav class="dashboard-nav">
-        <!-- NOVO: Info da unidade atual -->
-        <div id="unidade-atual" style="display: none; margin-right: 1rem; padding: 0.5rem 1rem; background: var(--bg-secondary); border-radius: var(--border-radius); font-size: 0.875rem; color: var(--primary); font-weight: 600;"></div>
+        <!-- Navegação rápida entre perfis (ex: Caixa <-> PDV) -->
+        <div id="nav-perfis" class="nav-perfis"></div>
+
+        <!-- Info da unidade atual (Clicável para trocar) -->
+        <div id="unidade-atual" class="unidade-atual-badge" style="display: none;" title="Trocar de Unidade"></div>
         
         <div class="user-info">
           <div class="user-avatar" id="user-avatar">U</div>
