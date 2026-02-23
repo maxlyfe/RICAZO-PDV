@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="pt-BR" data-theme="light">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Dashboard | RicaZo</title>
+  <link rel="stylesheet" href="/src/assets/css/styles.css">
+</head>
+<body>
+  <div class="dashboard">
+    <!-- Header -->
+    <header class="dashboard-header">
+      <!-- NOVO: Logo clicável com ID -->
+      <div class="dashboard-logo" id="logo-ricazo" title="Voltar para Home">
+        <span style="font-size: 2rem;">🥖</span>
+        <span>RicaZo</span>
+      </div>
+      
+      <nav class="dashboard-nav">
+        <!-- NOVO: Info da unidade atual -->
+        <div id="unidade-atual" style="display: none; margin-right: 1rem; padding: 0.5rem 1rem; background: var(--bg-secondary); border-radius: var(--border-radius); font-size: 0.875rem; color: var(--primary); font-weight: 600;"></div>
+        
+        <div class="user-info">
+          <div class="user-avatar" id="user-avatar">U</div>
+          <div class="user-details">
+            <span class="user-name" id="user-name">Usuário</span>
+            <span class="user-role" id="user-role">Perfil</span>
+          </div>
+          <div id="user-perfis" style="margin-left: 1rem; display: flex; gap: 0.5rem;"></div>
+        </div>
+        
+        <div class="header-actions">
+          <button class="theme-toggle" id="theme-toggle" title="Alternar tema">🌙</button>
+          <button class="btn btn-ghost btn-sm" id="btn-logout">🚪 Sair</button>
+        </div>
+      </nav>
+    </header>
+
+    <!-- Main Content -->
+    <main class="dashboard-main">
+      <div id="dashboard-content"></div>
+    </main>
+  </div>
+
+  <!-- Scripts na ordem correta -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  
+  <!-- Config -->
+  <script src="/src/assets/js/config/config.local.js"></script>
+  <script src="/src/assets/js/config/config.js"></script>
+  
+  <!-- Core -->
+  <script src="/src/assets/js/core/supabase.js"></script>
+  <script src="/src/assets/js/core/auth.js"></script>
+  
+  <!-- Utils -->
+  <script src="/src/assets/js/utils/modal.js"></script>
+  
+  <!-- Modules -->
+  <script src="/src/assets/js/modules/unidades.js"></script>
+  <script src="/src/assets/js/modules/usuarios.js"></script>
+  <script src="/src/assets/js/modules/produtos.js"></script>
+  <script src="/src/assets/js/modules/producao.js"></script>
+  
+  <!-- App -->
+  <script src="/src/assets/js/core/app.js"></script>
+</body>
+</html>

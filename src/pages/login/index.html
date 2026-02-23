@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="pt-BR" data-theme="light">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Login | RicaZo</title>
+  <link rel="stylesheet" href="/src/assets/css/styles.css">
+</head>
+<body>
+  <button class="theme-toggle" id="theme-toggle" title="Alternar tema" style="position: fixed; top: 1rem; right: 1rem;">🌙</button>
+
+  <div class="login-page">
+    <div class="login-container">
+      <div class="login-card">
+        <div class="login-logo">R</div>
+        <h1 class="login-title">RicaZo</h1>
+        <p class="login-subtitle">Sistema de Controle de Vendas</p>
+        
+        <div class="login-error" id="login-error"></div>
+        
+        <form class="login-form" id="login-form">
+          <div class="form-group">
+            <label class="form-label" for="username">Usuário</label>
+            <input type="text" id="username" class="form-input" placeholder="Digite seu usuário" autocomplete="username" required>
+          </div>
+          
+          <div class="form-group">
+            <label class="form-label" for="password">Senha</label>
+            <input type="password" id="password" class="form-input" placeholder="Digite sua senha" autocomplete="current-password" required>
+          </div>
+          
+          <button type="submit" class="btn btn-primary btn-lg w-full" id="btn-login">
+            <span id="btn-text">Entrar</span>
+            <span id="btn-spinner" class="spinner hidden"></span>
+          </button>
+        </form>
+        
+        <div class="login-footer">
+          <p>Versão 1.0.0 | Sistema de Padarias</p>
+          <p style="margin-top: 0.5rem; font-size: 0.75rem;">Suporte: dev@ricazo.com</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ORDEM CORRETA DOS SCRIPTS (nova estrutura) -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  
+  <!-- Config -->
+  <script src="/src/assets/js/config/config.local.js"></script>
+  <script src="/src/assets/js/config/config.js"></script>
+  
+  <!-- Core -->
+  <script src="/src/assets/js/core/supabase.js"></script>
+  <script src="/src/assets/js/core/auth.js"></script>
+
+  <script>
+    // Tema no login
+    const themeToggle = document.getElementById('theme-toggle');
+    themeToggle.addEventListener('click', () => {
+      const currentTheme = document.documentElement.getAttribute('data-theme');
+      const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
+      document.documentElement.setAttribute('data-theme', newTheme);
+      localStorage.setItem('ricazo_theme', newTheme);
+      themeToggle.textContent = newTheme === 'dark' ? '☀️' : '🌙';
+    });
+
+    const savedTheme = localStorage.getItem('ricazo_theme') || 'light';
+    document.documentElement.setAttribute('data-theme', savedTheme);
+    themeToggle.textContent = savedTheme === 'dark' ? '☀️' : '🌙';
+
+    // Login
+    document.getElementById('login-form').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      
+      const username = document.getElementById('username').value.trim();
+      const password = document.getElementById('password').value;
+      const btn = document.getElementById('btn-login');
+      const btnText = document.getElementById('btn-text');
+      const btnSpinner = document.getElementById('btn-spinner');
+      const errorDiv = document.getElementById('login-error');
+      
+      btn.disabled = true;
+      btnText.textContent = 'Entrando...';
+      btnSpinner.classList.remove('hidden');
+      errorDiv.classList.remove('show');
+      
+      try {
+        const result = await auth.login(username, password);
+        
+        if (result.success) {
+          auth.redirectByPerfil();
+        } else {
+          throw new Error(result.error);
+        }
+      } catch (error) {
+        errorDiv.textContent = error.message;
+        errorDiv.classList.add('show');
+        
+        btn.disabled = false;
+        btnText.textContent = 'Entrar';
+        btnSpinner.classList.add('hidden');
+      }
+    });
+
+    // Previne envio de senha no console
+    const originalLog = console.log;
+    console.log = function(...args) {
+      const filtered = args.map(arg => {
+        if (typeof arg === 'string' && arg.includes('senha')) {
+          return '[DADO SENSÍVEL OCULTADO]';
+        }
+        return arg;
+      });
+      originalLog.apply(console, filtered);
+    };
+  </script>
+</body>
+</html>
