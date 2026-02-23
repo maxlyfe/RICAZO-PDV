@@ -1,0 +1,4 @@
+[build]
+  # Força o Netlify a publicar a raiz do projeto. 
+  # Isto garante que todos os nossos caminhos "/src/..." funcionem perfeitamente online.
+  publish = "."
