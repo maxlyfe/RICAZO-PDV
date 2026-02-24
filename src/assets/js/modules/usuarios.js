@@ -1,23 +1,35 @@
 /**
- * RICAZO - Módulo de Usuários
+ * RICAZO - Módulo de Usuários (Tabela Original + Excluir/Ocultar + Lojas Independentes)
  */
 
 class UsuariosModule {
   constructor() {
     this.usuarios = [];
+    this.unidades = []; // NOVO: O módulo agora guarda a sua própria lista de unidades
   }
 
   async load() {
     try {
-      const { data, error } = await db.getClient()
-        .from('usuarios')
-        .select(`*, perfis:usuario_perfis(perfil), unidades:usuario_unidades(unidade_id, unidade:unidades(nome))`)
-        .eq('ativo', true)
-        .order('nome');
+      // Fazemos as duas buscas em simultâneo para ser ultrarrápido
+      const [resUsers, resUnidades] = await Promise.all([
+        db.getClient()
+          .from('usuarios')
+          .select(`*, perfis:usuario_perfis(perfil), unidades:usuario_unidades(unidade_id, unidade:unidades(nome))`)
+          .eq('ativo', true)
+          .order('nome'),
+        db.getClient()
+          .from('unidades')
+          .select('id, nome')
+          .eq('visivel', true)
+          .order('nome')
+      ]);
 
-      if (error) throw error;
+      if (resUsers.error) throw resUsers.error;
+      if (resUnidades.error) throw resUnidades.error;
       
-      this.usuarios = data || [];
+      this.usuarios = resUsers.data || [];
+      this.unidades = resUnidades.data || []; // Guardamos as unidades aqui
+      
       this.render();
       return this.usuarios;
     } catch (error) {
@@ -29,6 +41,8 @@ class UsuariosModule {
   render() {
     const container = document.getElementById('usuarios-list');
     if (!container) return;
+    
+    container.style.display = 'block';
 
     const usuariosVisiveis = auth.isDev() 
       ? this.usuarios 
@@ -63,7 +77,7 @@ class UsuariosModule {
     const podeEditar = auth.podeGerenciarUsuario(user);
     
     return `
-      <tr style="border-bottom: 1px solid var(--border-color);">
+      <tr style="border-bottom: 1px solid var(--border-color); transition: background 0.2s;" onmouseover="this.style.background='var(--bg-hover)'" onmouseout="this.style.background='transparent'">
         <td style="padding: 0.75rem; font-weight: 600;">${user.nome}</td>
         <td style="padding: 0.75rem; color: var(--text-secondary);">${user.username}</td>
         <td style="padding: 0.75rem;">
@@ -77,10 +91,15 @@ class UsuariosModule {
         </td>
         <td style="padding: 0.75rem; text-align: right;">
           ${podeEditar ? `
-            <button class="btn btn-sm btn-secondary" onclick="usuariosModule.editar('${user.id}')">
-              ✏️ Editar
-            </button>
-          ` : '<span style="color: var(--text-muted); font-size: 0.75rem;">🔒</span>'}
+            <div style="display: flex; gap: 0.5rem; justify-content: flex-end;">
+              <button class="btn btn-sm btn-secondary" onclick="usuariosModule.editar('${user.id}')">
+                ✏️ Editar
+              </button>
+              <button class="btn btn-sm" style="background: rgba(220,53,69,0.1); color: var(--danger); border: 1px solid var(--danger);" onclick="usuariosModule.excluir('${user.id}')" title="Ocultar e Remover Acesso">
+                🗑️ Excluir
+              </button>
+            </div>
+          ` : '<span style="color: var(--text-muted); font-size: 0.75rem;">🔒 Protegido</span>'}
         </td>
       </tr>
     `;
@@ -91,13 +110,29 @@ class UsuariosModule {
     if (container) container.innerHTML = `<p style="color: var(--danger); padding: 2rem;">❌ ${msg}</p>`;
   }
 
+  async excluir(id) {
+    const user = this.usuarios.find(u => u.id === id);
+    if (!user) return;
+
+    if (confirm(`⚠️ Tem certeza que deseja excluir o acesso de ${user.nome}?\n\nO usuário será ocultado desta lista e não poderá mais aceder ao sistema.`)) {
+      try {
+        await db.update('usuarios', id, { ativo: false });
+        await db.getClient().from('usuario_perfis').delete().eq('usuario_id', id);
+        
+        alert(`✅ Acesso revogado. ${user.nome} foi excluído com sucesso.`);
+        this.load(); 
+      } catch (error) {
+        alert('❌ Erro ao excluir usuário: ' + error.message);
+      }
+    }
+  }
+
   openModal() {
     if (!auth.hasPerfil('admin') && !auth.isDev()) {
       alert('❌ Sem permissão para criar usuários');
       return;
     }
 
-    // REGRA DE SEGURANÇA: Filtra o perfil 'dev' para não aparecer nas opções de criação
     const perfisDisponiveis = Object.entries(CONFIG.PERFIS_LABELS)
       .filter(([key]) => key !== 'dev' && auth.podeCriarPerfil(key))
       .map(([key, label]) => `
@@ -107,7 +142,8 @@ class UsuariosModule {
         </label>
       `).join('');
 
-    const unidadesOptions = unidadesModule.getAll().map(u => 
+    // Agora usa 'this.unidades' que foi carregado no 'load()'
+    const unidadesOptions = this.unidades.map(u => 
       `<option value="${u.id}">${u.nome}</option>`
     ).join('');
 
@@ -196,12 +232,12 @@ class UsuariosModule {
       return;
     }
 
-    const unidadesOptions = unidadesModule.getAll().map(u => {
+    // Agora usa 'this.unidades' que foi carregado no 'load()'
+    const unidadesOptions = this.unidades.map(u => {
       const selecionado = usuario.unidades?.some(un => un.unidade_id === u.id);
       return `<option value="${u.id}" ${selecionado ? 'selected' : ''}>${u.nome}</option>`;
     }).join('');
 
-    // REGRA DE SEGURANÇA: Filtra o perfil 'dev' para não aparecer nas opções de edição
     const perfisCheckboxes = Object.entries(CONFIG.PERFIS_LABELS)
       .filter(([key]) => key !== 'dev')
       .map(([key, label]) => {
@@ -256,13 +292,11 @@ class UsuariosModule {
     event.preventDefault();
     const form = event.target;
     
-    // Verifica se o usuário editado JÁ ERA dev no banco de dados
     const usuarioOriginal = this.usuarios.find(u => u.id === id);
     const eraDev = usuarioOriginal?.perfis.some(p => p.perfil === 'dev');
 
     const perfisSelecionados = Array.from(form.querySelectorAll('input[name="perfis"]:checked')).map(cb => cb.value);
     
-    // TRAVA DE SEGURANÇA: Injeta o 'dev' de volta para não apagar sem querer o acesso de um Dev
     if (eraDev && !perfisSelecionados.includes('dev')) {
       perfisSelecionados.push('dev');
     }
