@@ -1,12 +1,10 @@
 /**
- * RICAZO - Módulo de Gestão de Produtos (Uploads, Abas e Combos com KG)
+ * RICAZO - Módulo de Gestão de Produtos (Cards Premium, Combos e Soft Delete)
  */
 
 class ProdutosModule {
   constructor() {
     this.produtos = [];
-    
-    // Estados temporários para o modal de edição/criação
     this.editingId = null;
     this.isComboMode = false;
     this.comboItems = []; 
@@ -23,8 +21,11 @@ class ProdutosModule {
         .order('nome');
 
       if (error) throw error;
-      this.produtos = data || [];
+      
+      // Filtramos e mostramos apenas os que NÃO estão marcados como excluídos
+      this.produtos = (data || []).filter(p => p.excluido !== true);
       this.render(container);
+
     } catch (error) {
       console.error('Erro ao carregar produtos:', error);
       container.innerHTML = `<div class="text-center" style="color: var(--danger);">Erro ao carregar produtos.</div>`;
@@ -33,34 +34,184 @@ class ProdutosModule {
 
   render(container) {
     if (this.produtos.length === 0) {
-      container.innerHTML = `<div class="empty-state"><p>Nenhum produto cadastrado.</p></div>`;
+      container.innerHTML = `<div class="empty-state" style="grid-column: 1/-1;"><p>Nenhum produto cadastrado.</p></div>`;
       return;
     }
 
-    container.innerHTML = this.produtos.map(p => `
-      <div class="card" style="display: flex; gap: 1rem; align-items: center; padding: 1rem;">
-        <div style="width: 60px; height: 60px; background: var(--bg-secondary); border-radius: var(--border-radius); display: flex; align-items: center; justify-content: center; overflow: hidden; flex-shrink: 0;">
-          ${p.imagem_url 
-            ? `<img src="${p.imagem_url}" style="width: 100%; height: 100%; object-fit: cover;" onerror="this.style.display='none'">` 
-            : '🥖'}
-        </div>
-        <div style="flex: 1;">
-          <div style="font-weight: bold; font-size: 1.1rem; display: flex; align-items: center; gap: 0.5rem;">
-            ${p.nome} 
-            ${p.is_combo ? `<span style="background: var(--primary); color: white; font-size: 0.7rem; padding: 2px 6px; border-radius: 4px;">COMBO</span>` : ''}
+    // Estrutura CSS injetada especificamente para garantir que o layout nunca quebra, nem nos ecrãs mais pequenos
+    container.innerHTML = `
+      <style>
+        .admin-produto-card {
+          background: var(--bg-card);
+          border-radius: var(--border-radius-lg);
+          border: 1px solid var(--border-color);
+          box-shadow: var(--shadow-sm);
+          padding: 1.25rem;
+          display: flex;
+          flex-direction: column;
+          gap: 1rem;
+          transition: var(--transition);
+        }
+        .admin-produto-card:hover {
+          border-color: var(--primary-light);
+          box-shadow: var(--shadow-md);
+          transform: translateY(-3px);
+        }
+        .apc-header {
+          display: flex;
+          justify-content: space-between;
+          align-items: flex-start;
+          gap: 0.5rem;
+        }
+        .apc-badges {
+          display: flex;
+          gap: 0.5rem;
+          flex-wrap: wrap;
+        }
+        .apc-badge {
+          font-size: 0.65rem;
+          font-weight: 700;
+          padding: 0.25rem 0.6rem;
+          border-radius: 12px;
+          text-transform: uppercase;
+          letter-spacing: 0.5px;
+          display: inline-flex;
+          align-items: center;
+        }
+        .apc-actions {
+          display: flex;
+          gap: 0.5rem;
+        }
+        .apc-btn {
+          background: var(--bg-secondary);
+          border: 1px solid var(--border-color);
+          width: 34px;
+          height: 34px;
+          border-radius: 8px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          cursor: pointer;
+          transition: var(--transition);
+          font-size: 1rem;
+        }
+        .apc-btn:hover { background: var(--primary); border-color: var(--primary-dark); color: white !important; }
+        .apc-btn.btn-delete:hover { background: var(--danger); border-color: var(--danger); color: white !important; }
+        
+        .apc-body {
+          display: flex;
+          gap: 1rem;
+          align-items: center;
+        }
+        .apc-img {
+          width: 70px;
+          height: 70px;
+          border-radius: var(--border-radius);
+          background: var(--bg-secondary);
+          border: 1px solid rgba(0,0,0,0.05);
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          font-size: 2rem;
+          overflow: hidden;
+          flex-shrink: 0;
+        }
+        [data-theme="dark"] .apc-img { border-color: rgba(255,255,255,0.05); }
+        
+        .apc-info {
+          flex: 1;
+          min-width: 0;
+        }
+        .apc-nome {
+          font-size: 1.05rem;
+          font-weight: 700;
+          color: var(--text-primary);
+          line-height: 1.3;
+          margin-bottom: 0.25rem;
+          display: -webkit-box;
+          -webkit-line-clamp: 2;
+          -webkit-box-orient: vertical;
+          overflow: hidden;
+        }
+        .apc-preco {
+          font-size: 1.25rem;
+          font-weight: 800;
+          color: var(--primary);
+        }
+        .apc-unidade {
+          font-size: 0.75rem;
+          color: var(--text-muted);
+          font-weight: 600;
+          text-transform: uppercase;
+        }
+      </style>
+
+      ${this.produtos.map(p => `
+        <div class="admin-produto-card animate-fade-in">
+          
+          <!-- Linha Superior (Badges e Botões) -->
+          <div class="apc-header">
+            <div class="apc-badges">
+              <span class="apc-badge" style="background: ${p.ativo ? 'rgba(40,167,69,0.1)' : 'rgba(220,53,69,0.1)'}; color: ${p.ativo ? 'var(--success)' : 'var(--danger)'}; border: 1px solid ${p.ativo ? 'var(--success)' : 'var(--danger)'};">
+                ● ${p.ativo ? 'Ativo' : 'Inativo'}
+              </span>
+              ${p.is_combo ? `<span class="apc-badge" style="background: var(--primary); color: white;">📦 Combo</span>` : ''}
+            </div>
+            
+            <div class="apc-actions">
+              <button class="apc-btn" onclick="produtosModule.openModal('${p.id}')" title="Editar Produto">✏️</button>
+              ${(auth.isAdmin() || auth.isDev()) ? `
+                <button class="apc-btn btn-delete" onclick="produtosModule.excluir('${p.id}')" title="Excluir Produto" style="color: var(--danger); background: rgba(220,53,69,0.05);">🗑️</button>
+              ` : ''}
+            </div>
           </div>
-          <div style="color: var(--text-secondary); font-size: 0.9rem;">
-            R$ ${parseFloat(p.preco_base).toFixed(2)} • ${p.tipo_preco === 'peso' ? 'KG' : 'Unidade'}
+          
+          <!-- Linha Inferior (Foto, Nome e Preço) -->
+          <div class="apc-body">
+            <div class="apc-img">
+              ${p.imagem_url ? `<img src="${p.imagem_url}" style="width:100%; height:100%; object-fit:cover;" onerror="this.style.display='none'">` : '🥖'}
+            </div>
+            <div class="apc-info">
+              <div class="apc-nome" title="${p.nome}">${p.nome}</div>
+              <div class="apc-preco">
+                R$ ${parseFloat(p.preco_base).toFixed(2)}
+                <span class="apc-unidade">/ ${p.tipo_preco === 'peso' ? 'KG' : 'UN'}</span>
+              </div>
+            </div>
           </div>
-          <div style="font-size: 0.8rem; margin-top: 0.25rem;">
-            <span style="color: ${p.ativo ? 'var(--success)' : 'var(--danger)'}">● ${p.ativo ? 'Ativo' : 'Inativo'}</span>
-          </div>
+
         </div>
-        <div style="display: flex; gap: 0.5rem;">
-          <button class="btn btn-secondary btn-sm" onclick="produtosModule.openModal('${p.id}')">Editar</button>
-        </div>
-      </div>
-    `).join('');
+      `).join('')}
+    `;
+  }
+
+  async excluir(id) {
+    if (!auth.isAdmin() && !auth.isDev()) {
+      alert('❌ Sem permissão para excluir produtos.');
+      return;
+    }
+
+    if (confirm('⚠️ ATENÇÃO: Tem a certeza que deseja excluir este produto/combo?\n\n- Se for um produto novo sem vendas, ele será apagado do banco de dados.\n- Se ele já tiver histórico de vendas, será inativado e ocultado para sempre da lista, mantendo a sua contabilidade segura.')) {
+      try {
+        const { error } = await db.getClient().from('produtos').delete().eq('id', id);
+        
+        if (error) {
+          if (error.code === '23503' || error.message.includes('foreign key')) {
+            await db.update('produtos', id, { ativo: false, visivel: false, excluido: true });
+            alert('ℹ️ EXCLUSÃO INTELIGENTE:\nEste produto já possuía histórico de vendas. Ele foi excluído visualmente e inativado com sucesso. Os seus relatórios financeiros do passado continuam intactos!');
+          } else {
+            throw error; 
+          }
+        } else {
+           alert('✅ Produto excluído definitivamente do banco de dados!');
+        }
+        
+        this.load(); 
+
+      } catch (error) {
+        alert('❌ Erro ao excluir: ' + error.message);
+      }
+    }
   }
 
   openModal(id = null) {
@@ -69,17 +220,14 @@ class ProdutosModule {
     
     if (id) {
       const prod = this.produtos.find(x => x.id === id);
-      if (prod) {
-        p = { ...prod };
-      }
+      if (prod) p = { ...prod };
     }
 
-    // Se estiver a editar um combo, abre logo na aba de Combo
     this.isComboMode = p.is_combo;
     this.comboItems = p.itens_combo ? [...p.itens_combo] : [];
 
     const opcoesProdutos = this.produtos
-      .filter(prod => !prod.is_combo)
+      .filter(prod => !prod.is_combo && !prod.excluido)
       .map(prod => `<option value="${prod.id}" data-tipo="${prod.tipo_preco}">${prod.nome} (R$ ${parseFloat(prod.preco_base).toFixed(2)})</option>`)
       .join('');
 
@@ -90,7 +238,6 @@ class ProdutosModule {
           <button class="btn btn-ghost btn-sm" onclick="modal.close()">✕</button>
         </div>
         
-        <!-- NAVEGAÇÃO POR ABAS -->
         <div style="display: flex; gap: 0.5rem; width: 100%; border-bottom: 2px solid var(--border-color); padding-bottom: 1rem;">
           <button type="button" id="tab-simples" class="btn btn-sm ${!this.isComboMode ? 'btn-primary' : 'btn-ghost'}" onclick="produtosModule.mudarAbaModal(false)" style="flex: 1; border: 1px solid var(--border-color);">
             🥖 Item Simples
@@ -102,7 +249,6 @@ class ProdutosModule {
       </div>
 
       <form onsubmit="produtosModule.save(event)" style="margin-top: 1rem;">
-        
         <div class="form-group">
           <label class="form-label">Nome do Produto/Combo *</label>
           <input type="text" name="nome" class="form-input" required value="${p.nome}" placeholder="Ex: Pão de Queijo ou Combo Manhã">
@@ -122,13 +268,12 @@ class ProdutosModule {
           </div>
         </div>
 
-        <!-- CONSTRUTOR DE COMBO (Visibilidade controlada pelas abas) -->
         <div id="combo-builder-wrapper" style="display: ${this.isComboMode ? 'block' : 'none'};">
           <div style="border: 2px dashed var(--primary); padding: 1.5rem; border-radius: var(--border-radius); background: rgba(232, 145, 58, 0.05); margin-top: 0.5rem; margin-bottom: 1.5rem;">
             <h4 style="margin-top: 0; color: var(--primary); display: flex; align-items: center; gap: 0.5rem;">📋 Itens que compõem o Combo</h4>
             
-            <div style="display: flex; gap: 0.5rem; margin-bottom: 1rem; align-items: flex-end;">
-              <div style="flex: 1;">
+            <div style="display: flex; gap: 0.5rem; margin-bottom: 1rem; align-items: flex-end; flex-wrap: wrap;">
+              <div style="flex: 1; min-width: 200px;">
                 <label style="font-size: 0.75rem; color: var(--text-secondary);">Produto</label>
                 <select id="combo-select-produto" class="form-input" onchange="produtosModule.atualizarInputQtdCombo()">
                   ${opcoesProdutos}
@@ -172,7 +317,6 @@ class ProdutosModule {
     
     modal.open(content);
     
-    // Inicializa o input de quantidade do combo conforme o primeiro produto da lista e carrega a lista
     setTimeout(() => {
       this.atualizarInputQtdCombo();
       if (this.isComboMode) this.renderListaCombo();
@@ -182,7 +326,6 @@ class ProdutosModule {
   mudarAbaModal(isCombo) {
     this.isComboMode = isCombo;
     
-    // Atualiza classes dos botões (Abas)
     const btnSimples = document.getElementById('tab-simples');
     const btnCombo = document.getElementById('tab-combo');
     
@@ -191,20 +334,15 @@ class ProdutosModule {
     btnCombo.className = `btn btn-sm ${isCombo ? 'btn-primary' : 'btn-ghost'}`;
     btnCombo.style.border = '1px solid var(--border-color)';
 
-    // Atualiza Título
     const titleEl = document.getElementById('modal-produto-title');
-    if (titleEl) {
-       titleEl.innerHTML = `${this.editingId ? '✏️ Editar' : '➕ Novo'} ${isCombo ? 'Combo' : 'Produto'}`;
-    }
+    if (titleEl) titleEl.innerHTML = `${this.editingId ? '✏️ Editar' : '➕ Novo'} ${isCombo ? 'Combo' : 'Produto'}`;
 
-    // Mostra/Oculta Secções
     document.getElementById('container-tipo-preco').style.display = isCombo ? 'none' : 'block';
     document.getElementById('combo-builder-wrapper').style.display = isCombo ? 'block' : 'none';
     
     if (isCombo) this.renderListaCombo();
   }
 
-  // Atualiza o placeholder e os decimais do Input de Quantidade baseado no produto (Peso vs Unidade)
   atualizarInputQtdCombo() {
     const select = document.getElementById('combo-select-produto');
     const input = document.getElementById('combo-input-qtd');
@@ -217,12 +355,10 @@ class ProdutosModule {
     if (tipo === 'peso') {
       input.step = '0.001';
       input.placeholder = 'Ex: 0.500';
-      // Se era 1 (padrão de unidade), muda para algo que lembre gramas
       if (input.value === '1') input.value = '0.250';
     } else {
       input.step = '1';
       input.placeholder = 'Qtd';
-      // Se tinha decimais, arredonda para unidade
       if (input.value.includes('.')) input.value = '1';
     }
   }
@@ -232,13 +368,9 @@ class ProdutosModule {
     const qtd = parseFloat(document.getElementById('combo-input-qtd').value);
 
     if (prodId && qtd > 0) {
-      // Se já existir no combo, soma a quantidade
       const existente = this.comboItems.find(i => i.produto_id === prodId);
-      if (existente) {
-        existente.quantidade += qtd;
-      } else {
-        this.comboItems.push({ produto_id: prodId, quantidade: qtd });
-      }
+      if (existente) existente.quantidade += qtd;
+      else this.comboItems.push({ produto_id: prodId, quantidade: qtd });
       this.renderListaCombo();
     }
   }
@@ -255,13 +387,11 @@ class ProdutosModule {
 
     let valorRealItens = 0;
     let listaHtml = this.comboItems.map((item, idx) => {
-      // Procura o produto original para saber o preço dele
       const prodOriginal = this.produtos.find(p => p.id === item.produto_id);
       if (!prodOriginal) return '';
       
       const subtotal = parseFloat(prodOriginal.preco_base) * item.quantidade;
       valorRealItens += subtotal;
-
       const isPeso = prodOriginal.tipo_preco === 'peso';
       const qtdDisplay = isPeso ? `${item.quantidade.toFixed(3)} kg` : `${item.quantidade} un`;
 
@@ -276,11 +406,8 @@ class ProdutosModule {
       `;
     }).join('');
 
-    if (this.comboItems.length === 0) {
-      listaHtml = `<div style="text-align: center; color: var(--text-muted); font-size: 0.85rem; padding: 1rem;">Nenhum produto adicionado ao combo ainda.</div>`;
-    }
+    if (this.comboItems.length === 0) listaHtml = `<div style="text-align: center; color: var(--text-muted); font-size: 0.85rem; padding: 1rem;">Nenhum produto adicionado ao combo ainda.</div>`;
 
-    // Calcula Desconto Baseado no Preço Base Digitado
     const inputPreco = document.getElementById('input-preco-base');
     const precoCombo = inputPreco && inputPreco.value ? parseFloat(inputPreco.value) : 0;
     const desconto = valorRealItens - precoCombo;
@@ -311,55 +438,42 @@ class ProdutosModule {
       let finalImageUrl = form.imagem_url.value;
       const fileInput = document.getElementById('imagem_file');
 
-      // SELECIONOU UM FICHEIRO? FAZ O UPLOAD PARA O BUCKET DO SUPABASE
       if (fileInput && fileInput.files.length > 0) {
         btnSubmit.innerHTML = 'A enviar imagem... ⏳';
         const file = fileInput.files[0];
         const fileExt = file.name.split('.').pop();
         const fileName = `${Date.now()}_${Math.random().toString(36).substr(2, 9)}.${fileExt}`;
 
-        const { data: uploadData, error: uploadError } = await db.getClient()
-          .storage
-          .from('produtos')
-          .upload(fileName, file);
-
+        const { data: uploadData, error: uploadError } = await db.getClient().storage.from('produtos').upload(fileName, file);
         if (uploadError) throw new Error('Falha no upload da imagem: ' + uploadError.message);
 
-        // Pega a URL pública
         const { data: publicUrlData } = db.getClient().storage.from('produtos').getPublicUrl(fileName);
         finalImageUrl = publicUrlData.publicUrl;
       }
 
-      // Prepara os dados do produto
       const produtoData = {
         nome: form.nome.value,
         preco_base: parseFloat(form.preco_base.value),
-        tipo_preco: this.isComboMode ? 'unidade' : form.tipo_preco?.value, // Combos são sempre unidade
+        tipo_preco: this.isComboMode ? 'unidade' : form.tipo_preco?.value,
         imagem_url: finalImageUrl,
         ativo: form.ativo.checked,
         visivel: form.visivel.checked,
         is_combo: this.isComboMode,
-        itens_combo: this.isComboMode ? this.comboItems : [] // Grava o JSON do combo
+        itens_combo: this.isComboMode ? this.comboItems : [] 
       };
 
-      if (this.isComboMode && this.comboItems.length === 0) {
-        throw new Error("Um combo precisa de ter pelo menos 1 item adicionado.");
-      }
+      if (this.isComboMode && this.comboItems.length === 0) throw new Error("Um combo precisa de ter pelo menos 1 item adicionado.");
 
       btnSubmit.innerHTML = 'A guardar dados...';
 
-      if (this.editingId) {
-        await db.update('produtos', this.editingId, produtoData);
-      } else {
-        await db.insert('produtos', [produtoData]);
-      }
+      if (this.editingId) await db.update('produtos', this.editingId, produtoData);
+      else await db.insert('produtos', [produtoData]);
 
       modal.close();
-      this.load(); // Recarrega a grelha
+      this.load(); 
       alert('✅ Produto guardado com sucesso!');
 
     } catch (error) {
-      console.error('Erro ao salvar produto:', error);
       alert('❌ Erro: ' + error.message);
     } finally {
       btnSubmit.disabled = false;
