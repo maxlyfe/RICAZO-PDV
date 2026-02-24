@@ -92,24 +92,20 @@ class RicaZoApp {
     const urlParams = new URLSearchParams(window.location.search);
     const viewAtual = urlParams.get('view') || this.getDefaultView();
 
-    // 1. REGRA: Esconder navegação operacional se estivermos no Admin ou a Selecionar Loja
     if (viewAtual === 'admin' || viewAtual === 'selecao-unidade') {
       navPerfis.style.display = 'none';
       return;
     }
 
-    // 2. REGRA: Carregar os botões a que o utilizador tem direito (Admin e Dev têm acesso a tudo)
     let perfisOperacionais = user.perfis.filter(p => ['caixa', 'pdv', 'producao'].includes(p));
     if (auth.isDev() || auth.isAdmin()) {
       perfisOperacionais = ['caixa', 'pdv', 'producao'];
     }
 
-    // 3. REGRA: Se a unidade NÃO for fábrica, remove o botão de Produção
     if (unidade.tipo !== 'fabrica') {
       perfisOperacionais = perfisOperacionais.filter(p => p !== 'producao');
     }
 
-    // Só renderiza se houver botões a mostrar
     if (perfisOperacionais.length > 0) {
       const slug = auth.gerarSlug(unidade.nome); 
       
@@ -164,13 +160,10 @@ class RicaZoApp {
     switch(view) {
       case 'admin':
         if (auth.isDev() || auth.isAdmin()) {
-          const promises = [];
-          if (typeof dashboardModule !== 'undefined') promises.push(dashboardModule.carregarEstatisticas());
-          if (typeof estoqueModule !== 'undefined') promises.push(estoqueModule.load()); 
-          if (typeof unidadesModule !== 'undefined') promises.push(unidadesModule.load());
-          if (typeof usuariosModule !== 'undefined') promises.push(usuariosModule.load());
-          if (typeof produtosModule !== 'undefined') promises.push(produtosModule.load());
-          await Promise.all(promises);
+          // Agora só carrega o Dashboard! O Dashboard tratará do resto via Abas.
+          if (typeof dashboardModule !== 'undefined') {
+            await dashboardModule.carregarEstatisticas();
+          }
         }
         break;
       case 'selecao-unidade':
@@ -289,19 +282,18 @@ class RicaZoApp {
   }
 
   getViewHTML(view) {
-    const unidade = auth.getUnidadeAtual();
     const views = {
       admin: () => {
         if (!auth.isDev() && !auth.isAdmin()) return this.viewAcessoNegado();
+        // O Dashboard agora gere a UI toda. Deixamos apenas o contentor mestre vazio.
         return `
-          <div class="view-section animate-fade-in">
+          <div class="view-section animate-fade-in" style="padding: 0;">
             <div id="admin-dashboard-stats">
-              <div class="text-center" style="padding: 2rem;"><div class="spinner" style="margin: 0 auto 1rem;"></div><p>A calcular faturação...</p></div>
+              <div class="text-center" style="padding: 4rem;">
+                <div class="spinner" style="margin: 0 auto 1rem;"></div>
+                <p>A carregar Painel Mestre...</p>
+              </div>
             </div>
-            ${this.renderSection('estoque', '📦 Controlo Diário de Stock e Descartes', '', false)}
-            ${this.renderSection('unidades', '🏪 Gerenciar Unidades', 'unidadesModule.openModal()', auth.podeGerenciarUnidades())}
-            ${this.renderSection('usuarios', '👥 Gerenciar Utilizadores', 'usuariosModule.openModal()', true)}
-            ${this.renderSection('produtos', '🥖 Gerenciar Produtos', 'produtosModule.openModal()', true)}
           </div>
         `;
       },
@@ -325,20 +317,6 @@ class RicaZoApp {
 
   viewAcessoNegado() {
     return `<div class="view-section animate-fade-in" style="text-align: center; padding: 4rem;"><div style="font-size: 4rem; margin-bottom: 1rem;">🚫</div><h2 style="color: var(--danger); margin-bottom: 1rem;">Acesso Negado</h2><button class="btn btn-primary" onclick="auth.voltarParaHome()">← Voltar para a Home</button></div>`;
-  }
-
-  renderSection(id, title, onClick, mostrarBotao = true) {
-    return `
-      <div class="card" style="margin-top: 2rem;">
-        <div class="card-header">
-          <h3 class="card-title">${title}</h3>
-          ${mostrarBotao ? `<button class="btn btn-primary btn-sm" onclick="${onClick}">+ Novo</button>` : ''}
-        </div>
-        <div id="${id}-list" class="${id === 'unidades' || id === 'produtos' ? id + '-grid' : ''}">
-          <div class="text-center" style="padding: 2rem;"><div class="spinner" style="margin: 0 auto 1rem;"></div><p>A carregar...</p></div>
-        </div>
-      </div>
-    `;
   }
 }
 

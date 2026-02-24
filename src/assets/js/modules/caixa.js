@@ -1,11 +1,11 @@
 /**
- * RICAZO - Módulo Caixa (Abertura, Fechamento, Venda Rápida e Impressão Z)
+ * RICAZO - Módulo Caixa (Abertura, Fechamento, Venda Rápida e Histórico)
  */
 
 class CaixaModule {
   constructor() {
     this.unidadeAtual = null;
-    this.turnoAtual = null; // Guarda o estado do turno (Aberto/Fechado)
+    this.turnoAtual = null; 
     
     this.vendasAbertas = [];
     this.mesas = [];
@@ -18,6 +18,10 @@ class CaixaModule {
     this.taxaServicoPercent = 0; 
     
     this.carrinhoBalcao = []; 
+    
+    // Variáveis de suporte para o Histórico de Reimpressão
+    this.historicoTurnoAtual = [];
+    this.historicoPagamentosAtual = {};
   }
 
   async init() {
@@ -30,23 +34,20 @@ class CaixaModule {
     this.taxaServicoPercent = 0;
     this.carrinhoBalcao = [];
 
-    // Carrega definições base
     await Promise.all([
       this.loadUsuarios(),
       this.loadMesas(),
       this.loadFormasPagamento(),
       this.loadProdutos(),
-      this.loadTurnoAtual() // NOVO: Verifica se o caixa está aberto
+      this.loadTurnoAtual() 
     ]);
     
-    // Se houver turno, carrega as vendas abertas
     if (this.turnoAtual) {
       await this.loadVendasAbertas();
     }
     
     this.render();
     
-    // Polling de atualizações apenas se o turno estiver aberto
     if(this.interval) clearInterval(this.interval);
     this.interval = setInterval(() => {
       if(document.getElementById('caixa-content') && this.turnoAtual) {
@@ -67,11 +68,12 @@ class CaixaModule {
         .select('*')
         .eq('unidade_id', this.unidadeAtual)
         .eq('status', 'aberto')
-        .single();
+        .order('data_abertura', { ascending: false }) 
+        .limit(1);
       
-      this.turnoAtual = data || null;
+      this.turnoAtual = (data && data.length > 0) ? data[0] : null;
     } catch (error) {
-      this.turnoAtual = null; // Sem turno aberto
+      this.turnoAtual = null; 
     }
   }
 
@@ -112,7 +114,7 @@ class CaixaModule {
         status: 'aberto'
       }]);
 
-      await this.init(); // Recarrega tudo
+      await this.init(); 
     } catch (error) {
       alert('❌ Erro ao abrir caixa: ' + error.message);
       btn.disabled = false;
@@ -155,21 +157,24 @@ class CaixaModule {
     const userId = auth.getCurrentUser()?.id;
 
     try {
-      // 1. Busca todas as vendas FECHADAS deste turno (desde a abertura)
       const { data: vendasDoTurno } = await db.getClient()
         .from('vendas')
-        .select('id')
+        .select('id, taxa_servico')
         .eq('unidade_id', this.unidadeAtual)
         .eq('status', 'fechada')
         .gte('data_fechamento', this.turnoAtual.data_abertura);
 
       const vendasIds = (vendasDoTurno || []).map(v => v.id);
+      
+      let totalTaxasRecolhidas = 0;
+      (vendasDoTurno || []).forEach(v => {
+        totalTaxasRecolhidas += parseFloat(v.taxa_servico || 0);
+      });
 
       let totalVendasLiquido = 0;
       let totalDinheiroSistema = parseFloat(this.turnoAtual.fundo_caixa);
       let detalhesPagamentos = {};
 
-      // 2. Se houver vendas, puxa os pagamentos exatos
       if (vendasIds.length > 0) {
         const { data: pags } = await db.getClient()
           .from('pagamentos')
@@ -193,7 +198,6 @@ class CaixaModule {
 
       const diferenca = dinheiroInformado - totalDinheiroSistema;
 
-      // 3. Atualiza o registo do turno para Fechado
       const turnoFinal = {
         status: 'fechado',
         usuario_fechamento_id: userId,
@@ -207,12 +211,11 @@ class CaixaModule {
 
       await db.update('caixa_turnos', this.turnoAtual.id, turnoFinal);
 
-      // 4. Imprime o Relatório Z
-      this.imprimirRelatorioZ({ ...this.turnoAtual, ...turnoFinal });
+      this.imprimirRelatorioZ({ ...this.turnoAtual, ...turnoFinal }, totalTaxasRecolhidas);
 
       modal.close();
       alert('✅ Caixa fechado com sucesso! Relatório Z enviado para impressão.');
-      await this.init(); // Volta ao ecrã de cadeado
+      await this.init(); 
 
     } catch (error) {
       alert('❌ Erro no fecho de caixa: ' + error.message);
@@ -302,25 +305,31 @@ class CaixaModule {
         .comanda-item.urgente { border-left-color: var(--danger); animation: pulse 2s infinite; }
       </style>
       
-      <!-- Cabeçalho de Controle de Turno -->
       <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; padding: 0 1rem;">
         <div style="font-size: 0.9rem; color: var(--text-secondary);">
           <span style="display: inline-block; width: 10px; height: 10px; border-radius: 50%; background: var(--success); margin-right: 5px;"></span>
           Turno Aberto (Fundo: R$ ${parseFloat(this.turnoAtual.fundo_caixa).toFixed(2)})
         </div>
-        <button class="btn btn-sm btn-danger" onclick="caixaModule.abrirModalFechoCaixa()" style="box-shadow: var(--shadow-sm);">
-          🔒 Fechar Caixa
-        </button>
+        <div style="display: flex; gap: 0.5rem;">
+          <button class="btn btn-sm btn-secondary" onclick="caixaModule.abrirHistoricoTurno()" style="box-shadow: var(--shadow-sm);">
+            🧾 Histórico
+          </button>
+          <button class="btn btn-sm btn-danger" onclick="caixaModule.abrirModalFechoCaixa()" style="box-shadow: var(--shadow-sm);">
+            🔒 Fechar Caixa
+          </button>
+        </div>
       </div>
 
       <div class="caixa-container animate-fade-in">
         <div class="comandas-lista">
           <div class="card-header" style="padding: 1.5rem 1.5rem 0.5rem; border-bottom: none; margin-bottom: 0;">
             <h3 class="card-title">📝 Comandas</h3>
+            
             <div style="display:flex; gap:0.5rem;">
               <button class="btn btn-ghost btn-sm" onclick="caixaModule.refreshVendasAbertas()" title="Atualizar">🔄</button>
               <button class="btn btn-primary btn-sm" onclick="caixaModule.abrirModalNovaVendaRápida()">🛒 Nova Venda</button>
             </div>
+            
           </div>
           <div style="overflow-y: auto; flex: 1;" class="custom-scrollbar" id="lista-comandas-caixa">
             ${this.renderListaComandasHTML()}
@@ -420,7 +429,7 @@ class CaixaModule {
         </div>
       </div>
       
-      <!-- ITEM LIST (Ganha o máximo de espaço possível com flex: 1) -->
+      <!-- ITEM LIST -->
       <div class="pedido-itens custom-scrollbar" style="flex: 1; background: var(--bg-primary); padding: 1rem; overflow-y: auto;">
         <h4 style="margin-bottom: 0.75rem; color: var(--text-secondary); font-size: 0.75rem; text-transform: uppercase;">Itens Consumidos</h4>
         ${v.itens.map(item => `
@@ -451,7 +460,7 @@ class CaixaModule {
         </div>
       ` : ''}
       
-      <!-- PAYMENT AREA (Compacta para ocupar menos espaço visual) -->
+      <!-- PAYMENT AREA -->
       <div style="background: var(--bg-primary); border-top: 1px solid var(--border-color); padding: 1rem; flex-shrink: 0;">
         ${this.pagamentosAtuais.length > 0 ? `
           <div style="margin-bottom: 1rem;">
@@ -578,7 +587,9 @@ class CaixaModule {
   }
 
   async registrarSaidaEstoque(produtoId, quantidadeSaida, usuarioId, observacao) {
-    const { data: est } = await db.getClient().from('estoque').select('*').eq('produto_id', produtoId).eq('unidade_id', this.unidadeAtual).single();
+    const { data } = await db.getClient().from('estoque').select('*').eq('produto_id', produtoId).eq('unidade_id', this.unidadeAtual).limit(1);
+    const est = (data && data.length > 0) ? data[0] : null;
+    
     const qtdAnterior = est ? parseFloat(est.quantidade) : 0;
     const novaQtd = qtdAnterior - quantidadeSaida;
 
@@ -593,7 +604,151 @@ class CaixaModule {
   }
 
   // ==========================================
-  // BALCÃO RÁPIDO E IMPRESSÕES (Z e Cupom)
+  // HISTÓRICO RÁPIDO DO TURNO E REIMPRESSÃO
+  // ==========================================
+  async abrirHistoricoTurno() {
+    modal.open(`
+      <div class="card-header">
+        <h3 class="card-title">🧾 Histórico do Turno Atual</h3>
+        <button class="btn btn-ghost btn-sm" onclick="modal.close()">✕</button>
+      </div>
+      <div style="padding: 3rem; text-align: center;">
+        <div class="spinner"></div><p>Buscando vendas fechadas hoje...</p>
+      </div>
+    `);
+    
+    document.querySelector('.modal-content').classList.add('modal-large');
+
+    try {
+      const { data: vendasFechadas } = await db.getClient()
+        .from('vendas')
+        .select('id, total, taxa_servico, data_fechamento, tipo, identificador, mesa_id, itens:venda_itens(quantidade, subtotal, produto:produtos(nome))')
+        .eq('unidade_id', this.unidadeAtual)
+        .eq('status', 'fechada')
+        .gte('data_fechamento', this.turnoAtual.data_abertura)
+        .order('data_fechamento', { ascending: false });
+
+      const vendas = vendasFechadas || [];
+      let todosPagamentos = [];
+
+      if (vendas.length > 0) {
+        const vendasIds = vendas.map(v => v.id);
+        const { data: pags } = await db.getClient()
+          .from('pagamentos')
+          .select('venda_id, forma_pagamento_id, valor, troco')
+          .in('venda_id', vendasIds);
+        todosPagamentos = pags || [];
+      }
+
+      const pagamentosAgrupados = todosPagamentos.reduce((acc, p) => {
+        if (!acc[p.venda_id]) acc[p.venda_id] = [];
+        acc[p.venda_id].push(p);
+        return acc;
+      }, {});
+
+      // Salva em memória para permitir reimpressão rápida
+      this.historicoTurnoAtual = vendas;
+      this.historicoPagamentosAtual = pagamentosAgrupados;
+
+      let linhasHtml = '';
+      if (vendas.length === 0) {
+         linhasHtml = `<tr><td colspan="6" style="text-align:center; padding: 2rem; color: var(--text-muted);">Nenhuma venda finalizada neste turno ainda.</td></tr>`;
+      } else {
+         vendas.forEach(v => {
+           const hora = new Date(v.data_fechamento).toLocaleTimeString('pt-BR', {hour: '2-digit', minute:'2-digit'});
+           const mesa = this.mesas.find(m => m.id === v.mesa_id);
+           const origem = v.tipo === 'balcao' ? '🛒 Balcão' : `🍽️ Mesa ${mesa ? mesa.numero : v.identificador}`;
+           
+           const itensStr = (v.itens || []).map(i => `${i.quantidade}x ${i.produto?.nome}`).join(', ');
+           
+           const pags = pagamentosAgrupados[v.id] || [];
+           const pagsStr = pags.map(p => {
+             const fnome = this.formasPagamento.find(f => f.id === p.forma_pagamento_id)?.nome || 'Outros';
+             return `<span style="display:inline-block; background: var(--bg-primary); border: 1px solid var(--border-color); padding: 2px 6px; border-radius: 4px; margin-right: 4px; font-size: 0.75rem;">${fnome}: R$ ${(parseFloat(p.valor) - parseFloat(p.troco||0)).toFixed(2)}</span>`;
+           }).join('');
+
+           const totalFinal = parseFloat(v.total) + parseFloat(v.taxa_servico || 0);
+
+           linhasHtml += `
+             <tr style="border-bottom: 1px solid var(--border-color);">
+               <td style="color: var(--text-muted); font-size: 0.85rem; padding: 0.75rem 1rem;">${hora}</td>
+               <td style="font-weight: 600; font-size: 0.9rem; padding: 0.75rem 1rem;">${origem}</td>
+               <td style="font-size: 0.8rem; color: var(--text-secondary); max-width: 250px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding: 0.75rem 1rem;" title="${itensStr}">${itensStr}</td>
+               <td style="padding: 0.75rem 1rem;">${pagsStr}</td>
+               <td style="text-align: right; font-weight: 700; color: var(--primary); padding: 0.75rem 1rem;">R$ ${totalFinal.toFixed(2)}</td>
+               <td style="text-align: center; padding: 0.75rem 1rem;">
+                 <button class="btn btn-sm btn-ghost" style="border: 1px solid var(--border-color); padding: 0.35rem 0.5rem;" onclick="caixaModule.reimprimirVenda('${v.id}')" title="Reimprimir Ticket">🖨️</button>
+               </td>
+             </tr>
+           `;
+         });
+      }
+
+      const contentHtml = `
+        <style>
+          .modal-large { width: 95vw !important; max-width: 900px !important; }
+          .table-hist { width: 100%; border-collapse: collapse; }
+          .table-hist th { background: var(--bg-secondary); position: sticky; top: 0; font-size: 0.75rem; text-transform: uppercase; color: var(--text-secondary); padding: 0.75rem 1rem; text-align: left; z-index: 1; }
+        </style>
+        <div class="card-header">
+          <h3 class="card-title">🧾 Histórico do Turno Atual</h3>
+          <button class="btn btn-ghost btn-sm" onclick="modal.close()">✕</button>
+        </div>
+        <div style="max-height: 70vh; overflow-y: auto;" class="custom-scrollbar">
+          <table class="table-hist">
+            <thead>
+              <tr>
+                <th>Hora</th>
+                <th>Origem</th>
+                <th>Resumo dos Itens</th>
+                <th>Pagamento</th>
+                <th style="text-align: right;">Total</th>
+                <th style="text-align: center;">Ações</th>
+              </tr>
+            </thead>
+            <tbody>${linhasHtml}</tbody>
+          </table>
+        </div>
+      `;
+      
+      document.querySelector('.modal-content').innerHTML = contentHtml;
+
+    } catch (error) {
+      document.querySelector('.modal-content').innerHTML = `
+        <div class="card-header"><h3 class="card-title">Erro</h3><button class="btn btn-ghost" onclick="modal.close()">✕</button></div>
+        <div style="padding:2rem;color:red; text-align: center;">${error.message}</div>
+      `;
+    }
+  }
+
+  reimprimirVenda(vendaId) {
+    const venda = this.historicoTurnoAtual.find(v => v.id === vendaId);
+    if (!venda) return;
+
+    const pagamentos = this.historicoPagamentosAtual[venda.id] || [];
+    
+    const subtotalVenda = (venda.itens || []).reduce((sum, item) => sum + parseFloat(item.subtotal), 0);
+    const taxaValor = parseFloat(venda.taxa_servico || 0);
+    const totalVendaFinal = subtotalVenda + taxaValor;
+
+    const pagamentosFormatados = pagamentos.map(p => ({
+      forma_nome: this.formasPagamento.find(f => f.id === p.forma_pagamento_id)?.nome || 'Outros',
+      valor: parseFloat(p.valor)
+    }));
+
+    const totalPago = pagamentosFormatados.reduce((sum, p) => sum + p.valor, 0);
+    const trocoTotal = totalPago - totalVendaFinal > 0 ? totalPago - totalVendaFinal : 0;
+
+    let taxaPercent = 0;
+    if (subtotalVenda > 0 && taxaValor > 0) {
+      taxaPercent = Math.round((taxaValor / subtotalVenda) * 100);
+    }
+
+    this.imprimirTicket(venda, pagamentosFormatados, trocoTotal, subtotalVenda, taxaValor, taxaPercent, true);
+  }
+
+  // ==========================================
+  // BALCÃO RÁPIDO
   // ==========================================
   abrirModalNovaVendaRápida() {
     this.carrinhoBalcao = [];
@@ -762,25 +917,29 @@ class CaixaModule {
       modal.close();
       await this.refreshVendasAbertas();
       this.selecionarVenda(novaVenda.id); 
-
     } catch (error) { 
       alert('❌ Erro: ' + error.message); 
       if(btn) btn.disabled = false; 
     }
   }
 
-  imprimirTicket(venda, pagamentos, trocoTotal, subtotal, taxaValor, taxaPercent) {
+  // ==========================================
+  // FUNÇÕES DE IMPRESSÃO
+  // ==========================================
+  imprimirTicket(venda, pagamentos, trocoTotal, subtotal, taxaValor, taxaPercent, isReimpressao = false) {
     let printDiv = document.getElementById('print-section');
     if (!printDiv) { printDiv = document.createElement('div'); printDiv.id = 'print-section'; document.body.appendChild(printDiv); }
+    
     const unidade = auth.getUnidadeAtual();
-    const dataHora = new Date().toLocaleString('pt-BR');
+    const dataHora = venda.data_fechamento ? new Date(venda.data_fechamento).toLocaleString('pt-BR') : new Date().toLocaleString('pt-BR');
     const atendente = auth.getCurrentUser()?.nome || 'Operador';
     const mesa = this.mesas.find(m => m.id === venda.mesa_id);
     const identificador = venda.tipo === 'balcao' ? 'BALCÃO' : `MESA ${mesa ? mesa.numero : venda.identificador}`;
+    const tituloDoc = isReimpressao ? '*** REIMPRESSÃO ***' : (CONFIG.APP_NAME || 'RicaZo');
 
     const html = `
       <div class="ticket-header">
-        <div class="ticket-title">${CONFIG.APP_NAME || 'RicaZo'}</div>
+        <div class="ticket-title">${tituloDoc}</div>
         <div class="ticket-info">${unidade.nome}</div>
         <div class="ticket-info">${unidade.endereco || ''}</div>
         <div class="ticket-divider"></div>
@@ -809,8 +968,7 @@ class CaixaModule {
     setTimeout(() => window.print(), 150);
   }
 
-  // --- O RELATÓRIO Z (COMPROVANTE DE FECHO DE TURNO) ---
-  imprimirRelatorioZ(turno) {
+  imprimirRelatorioZ(turno, totalTaxasRecolhidas) {
     let printDiv = document.getElementById('print-section');
     if (!printDiv) { printDiv = document.createElement('div'); printDiv.id = 'print-section'; document.body.appendChild(printDiv); }
     
@@ -848,7 +1006,10 @@ class CaixaModule {
         ${formasHtml}
         
         <tr><td colspan="2"><div class="ticket-divider"></div></td></tr>
-        <tr><td class="bold">TOTAL FATURADO (LIQUIDO):</td><td class="bold">R$ ${parseFloat(turno.total_vendas).toFixed(2)}</td></tr>
+        <tr><td class="bold">TOTAL PRODUTOS (CASA):</td><td class="bold">R$ ${(parseFloat(turno.total_vendas) - totalTaxasRecolhidas).toFixed(2)}</td></tr>
+        <tr><td class="bold">TOTAL TAXAS SERVIÇO:</td><td class="bold">R$ ${parseFloat(totalTaxasRecolhidas).toFixed(2)}</td></tr>
+        <tr><td colspan="2"><div style="height:5px;"></div></td></tr>
+        <tr><td class="bold">TOTAL GERAL RECEBIDO:</td><td class="bold">R$ ${parseFloat(turno.total_vendas).toFixed(2)}</td></tr>
       </table>
 
       <div class="ticket-divider"></div>

@@ -1,5 +1,5 @@
 /**
- * RICAZO - Módulo Dashboard (Inteligência Financeira, Auditoria e Desempenho)
+ * RICAZO - Módulo Dashboard (Controlador Mestre Administrativo e Inteligência)
  */
 
 class DashboardModule {
@@ -10,16 +10,17 @@ class DashboardModule {
     this.mesasMap = {}; 
     this.formasMap = {}; 
     this.vendasAtuais = []; 
+    this.turnosAtuais = []; 
     
-    this.telaAtual = 'resumo'; // 'resumo' | 'auditoria' | 'equipe'
+    // NAVEGAÇÃO MESTRE
+    this.moduloAtivo = 'bi'; // 'bi' | 'estoque' | 'unidades' | 'usuarios' | 'produtos'
+    this.telaAtual = 'resumo'; // sub-aba do BI: 'resumo' | 'auditoria' | 'equipe' | 'turnos'
     
-    // Ajuste de fuso horário seguro para o formato YYYY-MM-DD
     const hoje = new Date();
     const fusoOffset = hoje.getTimezoneOffset() * 60000;
     const dataLocal = new Date(hoje.getTime() - fusoOffset);
     const hojeStr = dataLocal.toISOString().split('T')[0];
     
-    // Primeiro dia do mês corrente
     const primeiroDiaMes = new Date(dataLocal.getFullYear(), dataLocal.getMonth(), 1);
     const priDiaStr = primeiroDiaMes.toISOString().split('T')[0];
     
@@ -36,8 +37,38 @@ class DashboardModule {
     const container = document.getElementById('admin-dashboard-stats');
     if (!container) return;
 
-    if (!document.getElementById('dashboard-wrapper')) {
-      this.renderBaseUI(container);
+    // TRUQUE DE SÉNIOR: Oculta silenciosamente os blocos originais espalhados pelo HTML
+    // para garantir que o ecrã fica limpo e tudo renderiza exclusivamente dentro das novas Abas.
+    const IDsParaEsconder = ['estoque-list', 'unidades-list', 'usuarios-list', 'produtos-list'];
+    IDsParaEsconder.forEach(id => {
+      const original = document.getElementById(id);
+      if (original && !original.classList.contains('injected-tab')) {
+         original.style.display = 'none';
+         if (original.parentElement) {
+            if (original.parentElement.classList.contains('card')) original.parentElement.style.display = 'none';
+            const headerPrevio = original.previousElementSibling;
+            if (headerPrevio && (headerPrevio.tagName.includes('H') || headerPrevio.classList.contains('card-header'))) {
+               headerPrevio.style.display = 'none';
+            }
+         }
+      }
+    });
+
+    if (!document.getElementById('admin-master-wrapper')) {
+      // INJEÇÃO DA NAVEGAÇÃO MESTRE
+      container.innerHTML = `
+        <div id="admin-master-wrapper">
+          <div id="admin-master-nav" style="display: flex; gap: 0.5rem; margin-bottom: 1.5rem; border-bottom: 2px solid var(--border-color); padding-bottom: 1rem; overflow-x: auto;" class="custom-scrollbar">
+            <button id="nav-bi" class="btn btn-primary" style="white-space: nowrap; font-weight: 800; border-radius: 8px;" onclick="dashboardModule.mudarModulo('bi')">📊 Painel de Inteligência (BI)</button>
+            <button id="nav-estoque" class="btn btn-ghost" style="white-space: nowrap; font-weight: 700; border-radius: 8px;" onclick="dashboardModule.mudarModulo('estoque')">📦 Stock e Descartes</button>
+            <button id="nav-unidades" class="btn btn-ghost" style="white-space: nowrap; font-weight: 700; border-radius: 8px;" onclick="dashboardModule.mudarModulo('unidades')">🏪 Lojas e Fábricas</button>
+            <button id="nav-usuarios" class="btn btn-ghost" style="white-space: nowrap; font-weight: 700; border-radius: 8px;" onclick="dashboardModule.mudarModulo('usuarios')">👥 Utilizadores</button>
+            <button id="nav-produtos" class="btn btn-ghost" style="white-space: nowrap; font-weight: 700; border-radius: 8px;" onclick="dashboardModule.mudarModulo('produtos')">🥖 Catálogo de Produtos</button>
+          </div>
+          <div id="admin-module-content"></div>
+        </div>
+      `;
+
       await Promise.all([
         this.carregarUnidadesFiltro(),
         this.carregarUsuariosMap(),
@@ -46,36 +77,93 @@ class DashboardModule {
       ]);
     }
 
-    await this.processarDados();
+    this.renderModuloAtivo();
   }
 
-  getIconePagamento(nomeForma) {
-    if (!nomeForma) return '🪙';
-    const n = nomeForma.toLowerCase();
-    if (n.includes('pix')) return '💠';
-    if (n.includes('dinheiro')) return '💵';
-    if (n.includes('crédito') || n.includes('credito')) return '💳';
-    if (n.includes('débito') || n.includes('debito')) return '🏧';
-    return '🪙';
+  // ===============================================
+  // GESTÃO DA NAVEGAÇÃO MESTRE
+  // ===============================================
+  mudarModulo(modulo) {
+    this.moduloAtivo = modulo;
+    ['bi', 'estoque', 'unidades', 'usuarios', 'produtos'].forEach(m => {
+      const btn = document.getElementById('nav-' + m);
+      if (btn) btn.className = m === modulo ? 'btn btn-primary' : 'btn btn-ghost';
+    });
+    this.renderModuloAtivo();
   }
 
-  renderBaseUI(container) {
+  renderModuloAtivo() {
+    const content = document.getElementById('admin-module-content');
+    if (!content) return;
+
+    if (this.moduloAtivo === 'bi') {
+      this.renderBaseUI_BI(content);
+      this.processarDados();
+    } 
+    else if (this.moduloAtivo === 'estoque') {
+      content.innerHTML = `
+        <div class="card animate-fade-in" style="padding: 0; overflow: hidden; border: 1px solid var(--border-color);">
+          <div class="card-header" style="background: var(--bg-secondary); border-bottom: 1px solid var(--border-color); margin: 0; padding: 1.5rem;">
+            <h3 class="card-title" style="margin: 0;">📦 Controlo Diário de Stock e Descartes</h3>
+          </div>
+          <div id="estoque-list" class="injected-tab"></div>
+        </div>
+      `;
+      if (window.estoqueModule) window.estoqueModule.load();
+    }
+    else if (this.moduloAtivo === 'unidades') {
+      content.innerHTML = `
+        <div class="card-header animate-fade-in" style="justify-content: space-between; display: flex; align-items: center; margin-bottom: 1.5rem;">
+          <h3 class="card-title" style="margin: 0;">🏪 Gestão de Lojas e Fábricas</h3>
+          <button class="btn btn-primary" onclick="window.unidadesModule.openModal()">+ Nova Unidade</button>
+        </div>
+        <div id="unidades-list" class="dashboard-grid injected-tab" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 1.5rem;"></div>
+      `;
+      if (window.unidadesModule) window.unidadesModule.load();
+    }
+    else if (this.moduloAtivo === 'usuarios') {
+      content.innerHTML = `
+        <div class="card animate-fade-in" style="padding: 0; overflow: hidden; border: 1px solid var(--border-color);">
+          <div class="card-header" style="background: var(--bg-secondary); border-bottom: 1px solid var(--border-color); margin: 0; padding: 1.5rem; justify-content: space-between; display: flex; align-items: center;">
+            <h3 class="card-title" style="margin: 0;">👥 Controlo de Acessos e Utilizadores</h3>
+            <button class="btn btn-primary" onclick="window.usuariosModule.openModal()">+ Novo Utilizador</button>
+          </div>
+          <div id="usuarios-list" class="injected-tab"></div>
+        </div>
+      `;
+      if (window.usuariosModule) window.usuariosModule.load();
+    }
+    else if (this.moduloAtivo === 'produtos') {
+      content.innerHTML = `
+        <div class="card-header animate-fade-in" style="justify-content: space-between; display: flex; align-items: center; margin-bottom: 1.5rem;">
+          <h3 class="card-title" style="margin: 0;">🥖 Catálogo de Produtos e Combos</h3>
+          <button class="btn btn-primary" onclick="window.produtosModule.openModal()">+ Novo Produto</button>
+        </div>
+        <div id="produtos-list" class="injected-tab" style="display: grid; gap: 1rem;"></div>
+      `;
+      if (window.produtosModule) window.produtosModule.load();
+    }
+  }
+
+
+  // ===============================================
+  // PAINEL DE INTELIGÊNCIA (BI)
+  // ===============================================
+  renderBaseUI_BI(container) {
     container.innerHTML = `
-      <div id="dashboard-wrapper">
-        
-        <!-- CABEÇALHO E ABAS DE NAVEGAÇÃO -->
+      <div class="animate-fade-in">
         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; flex-wrap: wrap; gap: 1rem;">
           <div style="display: flex; gap: 0.5rem; background: var(--bg-secondary); padding: 0.5rem; border-radius: var(--border-radius-lg); border: 1px solid var(--border-color); overflow-x: auto; max-width: 100%;">
-            <button id="tab-resumo" class="btn btn-primary" style="border-radius: var(--border-radius); padding: 0.5rem 1rem; white-space: nowrap;" onclick="dashboardModule.mudarTela('resumo')">📊 Resumo Gráfico</button>
-            <button id="tab-equipe" class="btn btn-ghost" style="border-radius: var(--border-radius); padding: 0.5rem 1rem; white-space: nowrap;" onclick="dashboardModule.mudarTela('equipe')">👥 Desempenho Equipa</button>
-            <button id="tab-auditoria" class="btn btn-ghost" style="border-radius: var(--border-radius); padding: 0.5rem 1rem; white-space: nowrap;" onclick="dashboardModule.mudarTela('auditoria')">🧾 Histórico de Vendas</button>
+            <button id="tab-resumo" class="btn ${this.telaAtual === 'resumo' ? 'btn-primary' : 'btn-ghost'}" style="border-radius: var(--border-radius); padding: 0.5rem 1rem; white-space: nowrap;" onclick="dashboardModule.mudarTela('resumo')">📊 Resumo Gráfico</button>
+            <button id="tab-equipe" class="btn ${this.telaAtual === 'equipe' ? 'btn-primary' : 'btn-ghost'}" style="border-radius: var(--border-radius); padding: 0.5rem 1rem; white-space: nowrap;" onclick="dashboardModule.mudarTela('equipe')">👥 Desempenho Equipa</button>
+            <button id="tab-auditoria" class="btn ${this.telaAtual === 'auditoria' ? 'btn-primary' : 'btn-ghost'}" style="border-radius: var(--border-radius); padding: 0.5rem 1rem; white-space: nowrap;" onclick="dashboardModule.mudarTela('auditoria')">🧾 Vendas (Itens)</button>
+            <button id="tab-turnos" class="btn ${this.telaAtual === 'turnos' ? 'btn-primary' : 'btn-ghost'}" style="border-radius: var(--border-radius); padding: 0.5rem 1rem; white-space: nowrap;" onclick="dashboardModule.mudarTela('turnos')">🔒 Fechos de Caixa</button>
           </div>
         </div>
 
-        <!-- FILTROS PRINCIPAIS -->
         <div class="card" style="margin-bottom: 1.5rem; padding: 0; overflow: hidden;" id="dashboard-filtros">
           <div style="padding: 1.5rem 1.5rem 0.5rem 1.5rem; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem;">
-            <h3 class="card-title" style="margin: 0; font-size: 1.25rem;">Painel de Inteligência</h3>
+            <h3 class="card-title" style="margin: 0; font-size: 1.25rem;">Filtros de Auditoria</h3>
             
             <div style="display: flex; gap: 1rem; align-items: center; flex-wrap: wrap;">
               <div style="display: flex; align-items: center; gap: 0.5rem;">
@@ -91,19 +179,18 @@ class DashboardModule {
           <div id="dashboard-unidades-botoes" style="display: flex; gap: 0.5rem; flex-wrap: wrap; padding: 0 1.5rem 1.5rem 1.5rem; border-bottom: 1px solid var(--border-color);"></div>
         </div>
         
-        <!-- CONTENTOR DINÂMICO (Gráficos ou Tabela) -->
         <div id="dashboard-dynamic-content">
            <div class="text-center" style="padding: 3rem;"><div class="spinner"></div></div>
         </div>
       </div>
     `;
+    this.renderUnidadesBotoes();
   }
 
   async carregarUnidadesFiltro() {
     try {
       const { data } = await db.getClient().from('unidades').select('id, nome').eq('visivel', true).order('nome');
       this.unidades = data || [];
-      this.renderUnidadesBotoes();
     } catch (error) {}
   }
 
@@ -164,13 +251,14 @@ class DashboardModule {
     document.getElementById('tab-resumo').className = tela === 'resumo' ? 'btn btn-primary' : 'btn btn-ghost';
     document.getElementById('tab-equipe').className = tela === 'equipe' ? 'btn btn-primary' : 'btn btn-ghost';
     document.getElementById('tab-auditoria').className = tela === 'auditoria' ? 'btn btn-primary' : 'btn btn-ghost';
+    document.getElementById('tab-turnos').className = tela === 'turnos' ? 'btn btn-primary' : 'btn btn-ghost';
     
     const hoje = new Date();
     const fusoOffset = hoje.getTimezoneOffset() * 60000;
     const dataLocal = new Date(hoje.getTime() - fusoOffset);
     const hojeStr = dataLocal.toISOString().split('T')[0];
     
-    if (tela === 'auditoria') {
+    if (tela === 'auditoria' || tela === 'turnos') {
       this.filtros.dataInicio = hojeStr;
       this.filtros.dataFim = hojeStr;
     } else {
@@ -200,8 +288,7 @@ class DashboardModule {
       const fusoOffset = new Date().getTimezoneOffset() * 60000;
       const hojeStr = new Date(Date.now() - fusoOffset).toISOString().split('T')[0];
 
-      // 1. Busca Vendas e ITENS (Para saber quem lançou o quê)
-      let query = db.getClient()
+      let queryVendas = db.getClient()
         .from('vendas')
         .select('id, total, taxa_servico, data_fechamento, tipo, identificador, mesa_id, usuario_fechamento_id, unidade_id, itens:venda_itens(subtotal, usuario_id)')
         .eq('status', 'fechada')
@@ -210,15 +297,26 @@ class DashboardModule {
         .order('data_fechamento', { ascending: false });
 
       if (this.filtros.unidadeId !== 'todas') {
-        query = query.eq('unidade_id', this.filtros.unidadeId);
+        queryVendas = queryVendas.eq('unidade_id', this.filtros.unidadeId);
       }
 
-      const { data: vendas, error } = await query;
-      if (error) throw error;
-
+      const { data: vendas } = await queryVendas;
       this.vendasAtuais = vendas || [];
 
-      // 2. Busca Pagamentos (Para Cartão/PIX/Dinheiro)
+      let queryTurnos = db.getClient()
+        .from('caixa_turnos')
+        .select('*')
+        .gte('data_abertura', dataInicioIso)
+        .lte('data_abertura', dataFimIso)
+        .order('data_abertura', { ascending: false });
+
+      if (this.filtros.unidadeId !== 'todas') {
+        queryTurnos = queryTurnos.eq('unidade_id', this.filtros.unidadeId);
+      }
+
+      const { data: turnos } = await queryTurnos;
+      this.turnosAtuais = turnos || [];
+
       let todosPagamentos = [];
       if (this.vendasAtuais.length > 0) {
         const vendasIds = this.vendasAtuais.map(v => v.id);
@@ -239,7 +337,6 @@ class DashboardModule {
         return acc;
       }, {});
 
-      // 3. Estruturas para Métricas
       let faturamentoPeriodo = 0;
       let faturamentoHoje = 0;
       let taxasPeriodo = 0;
@@ -254,7 +351,7 @@ class DashboardModule {
         outros: { icon: '🪙', label: 'Outros', hoje: 0, periodo: 0 }
       };
 
-      this.metricasEquipe = {}; // Para o relatório de Garçons/Operadores
+      this.metricasEquipe = {}; 
 
       const chartMap = {};
       let dAtual = new Date(this.filtros.dataInicio + 'T12:00:00');
@@ -267,7 +364,6 @@ class DashboardModule {
         dAtual.setDate(dAtual.getDate() + 1);
       }
 
-      // 4. Processa Vendas, Pagamentos e Rateio de Taxas
       this.vendasAtuais.forEach(v => {
         v.pagamentos = pagamentosAgrupados[v.id] || [];
         
@@ -278,11 +374,9 @@ class DashboardModule {
         const isHoje = diaVendaStr === hojeStr;
         const taxaVenda = parseFloat(v.taxa_servico || 0);
 
-        // Somatórios Gerais
         taxasPeriodo += taxaVenda;
         if (isHoje) taxasHoje += taxaVenda;
 
-        // Distribuição da Taxa de Serviço e Venda por Garçom (quem lançou o item)
         const totalSubtotalItens = (v.itens || []).reduce((sum, i) => sum + parseFloat(i.subtotal), 0);
         
         (v.itens || []).forEach(item => {
@@ -300,7 +394,6 @@ class DashboardModule {
            }
         });
 
-        // Formas de Pagamento e Gráficos
         if (v.pagamentos.length === 0) {
           const valor = parseFloat(v.total) + taxaVenda;
           faturamentoPeriodo += valor;
@@ -346,14 +439,14 @@ class DashboardModule {
       this.dadosGrafico = Object.values(chartMap).map(d => d.totalVenda);
       this.dadosGraficoCompletos = Object.values(chartMap); 
 
-      this.renderDynamicUI();
+      this.renderDynamicUI_BI();
 
     } catch (error) {
       console.error('Erro ao processar dados do dashboard:', error);
     }
   }
 
-  renderDynamicUI() {
+  renderDynamicUI_BI() {
     const container = document.getElementById('dashboard-dynamic-content');
     if (!container) return;
 
@@ -364,7 +457,19 @@ class DashboardModule {
       container.innerHTML = this.htmlTelaAuditoria();
     } else if (this.telaAtual === 'equipe') {
       container.innerHTML = this.htmlTelaEquipe();
+    } else if (this.telaAtual === 'turnos') {
+      container.innerHTML = this.htmlTelaTurnos(); 
     }
+  }
+
+  getIconePagamento(nomeForma) {
+    if (!nomeForma) return '🪙';
+    const n = nomeForma.toLowerCase();
+    if (n.includes('pix')) return '💠';
+    if (n.includes('dinheiro')) return '💵';
+    if (n.includes('crédito') || n.includes('credito')) return '💳';
+    if (n.includes('débito') || n.includes('debito')) return '🏧';
+    return '🪙';
   }
 
   htmlTelaResumo() {
@@ -372,13 +477,11 @@ class DashboardModule {
       <div class="dashboard-grid animate-fade-in" style="margin-bottom: 1.5rem; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));">
         <div class="stat-card success"><div class="stat-header"><span class="stat-title">Faturação Hoje</span><div class="stat-icon">💰</div></div><div class="stat-value">R$ ${this.faturamentoHoje.toFixed(2)}</div><div class="stat-change" style="color: var(--text-muted);">Acumulado de hoje</div></div>
         <div class="stat-card info"><div class="stat-header"><span class="stat-title">Faturação no Período</span><div class="stat-icon">📅</div></div><div class="stat-value">R$ ${this.faturamentoPeriodo.toFixed(2)}</div><div class="stat-change" style="color: var(--text-muted);">${this.qtdVendas} Vendas</div></div>
-        
         <div class="stat-card" style="border-left-color: var(--dev-color);">
           <div class="stat-header"><span class="stat-title">Taxas de Serviço</span><div class="stat-icon">🍽️</div></div>
           <div class="stat-value" style="color: var(--dev-color);">R$ ${this.taxasPeriodo.toFixed(2)}</div>
           <div class="stat-change" style="color: var(--text-muted);">Hoje: R$ ${this.taxasHoje.toFixed(2)}</div>
         </div>
-
         <div class="stat-card warning"><div class="stat-header"><span class="stat-title">Ticket Médio</span><div class="stat-icon">🧾</div></div><div class="stat-value">R$ ${this.ticketMedio.toFixed(2)}</div><div class="stat-change" style="color: var(--text-muted);">Por cliente no período</div></div>
       </div>
     `;
@@ -417,9 +520,6 @@ class DashboardModule {
     return html;
   }
 
-  // ===============================================
-  // ABA: DESEMPENHO DA EQUIPA E GORJETAS (Corrigido texto da tabela)
-  // ===============================================
   htmlTelaEquipe() {
     const equipaArray = Object.entries(this.metricasEquipe)
       .map(([uid, dados]) => ({
@@ -475,7 +575,6 @@ class DashboardModule {
               <tr>
                 <th style="text-align: left;">Garçom / Atendente</th>
                 <th style="text-align: right;">Total de Vendas (Produtos)</th>
-                <!-- AQUI O TEXTO FOI CORRIGIDO PARA NÃO CONFUNDIR -->
                 <th style="text-align: right;">Gorjetas Individuais (Valor Real Recebido)</th>
                 <th style="text-align: right;">Volume Total Movimentado</th>
               </tr>
@@ -540,7 +639,7 @@ class DashboardModule {
 
       <div class="card animate-fade-in" style="margin-bottom: 2.5rem; padding: 0; overflow: hidden; border: 1px solid var(--primary-light);">
         <div class="card-header" style="background: rgba(232, 145, 58, 0.05); border-bottom: 1px solid var(--border-color); margin: 0; padding: 1.5rem;">
-          <h3 class="card-title">🧾 Relatório Detalhado de Vendas</h3>
+          <h3 class="card-title">🧾 Relatório Detalhado de Vendas (Itens)</h3>
         </div>
         
         <div style="width: 100%; overflow-x: auto;">
@@ -563,6 +662,169 @@ class DashboardModule {
         </div>
       </div>
     `;
+  }
+
+  htmlTelaTurnos() {
+    let linhasHtml = '';
+
+    if (this.turnosAtuais.length === 0) {
+      linhasHtml = `<tr><td colspan="8" class="text-center" style="padding: 3rem; color: var(--text-muted);">Nenhum turno de caixa registado neste período.</td></tr>`;
+    } else {
+      this.turnosAtuais.forEach(t => {
+        const dataAbertura = new Date(t.data_abertura);
+        const inicio = dataAbertura.toLocaleString('pt-PT', {day:'2-digit', month:'2-digit', hour:'2-digit', minute:'2-digit'});
+        const fim = t.data_fechamento ? new Date(t.data_fechamento).toLocaleString('pt-PT', {hour:'2-digit', minute:'2-digit'}) : 'A decorrer';
+        
+        const opAbertura = this.usuariosMap[t.usuario_abertura_id] || 'Desconhecido';
+        const opFecho = this.usuariosMap[t.usuario_fechamento_id] || '---';
+        const nomeUnidade = this.unidades.find(u => u.id === t.unidade_id)?.nome || '---';
+        
+        const statusBadge = t.status === 'aberto' 
+          ? `<span style="background: rgba(40,167,69,0.1); color: var(--success); padding: 4px 8px; border-radius: 4px; font-weight: 700; font-size: 0.75rem; white-space: nowrap;">🟢 ABERTO</span>` 
+          : `<span style="background: rgba(0,0,0,0.05); color: var(--text-secondary); padding: 4px 8px; border-radius: 4px; font-weight: 700; font-size: 0.75rem; white-space: nowrap;">🔒 FECHADO</span>`;
+
+        const vendas = parseFloat(t.total_vendas || 0);
+        const esperadoGaveta = parseFloat(t.total_dinheiro_sistema || 0);
+        const contadoGaveta = parseFloat(t.total_dinheiro_informado || 0);
+        const diferenca = parseFloat(t.diferenca_caixa || 0);
+        
+        let difHtml = `<span style="color: var(--text-muted);">---</span>`;
+        if (t.status === 'fechado') {
+          if (diferenca < 0) difHtml = `<span style="color: var(--danger); font-weight: 800;">R$ ${diferenca.toFixed(2)}</span><div style="font-size: 0.7rem; color: var(--danger);">Quebra (Falta)</div>`;
+          else if (diferenca > 0) difHtml = `<span style="color: var(--success); font-weight: 800;">+ R$ ${diferenca.toFixed(2)}</span><div style="font-size: 0.7rem; color: var(--success);">Sobra</div>`;
+          else difHtml = `<span style="color: var(--text-primary); font-weight: 800;">Exato</span><div style="font-size: 0.7rem; color: var(--text-muted);">R$ 0.00</div>`;
+        }
+
+        linhasHtml += `
+          <tr>
+            <td>${statusBadge}</td>
+            ${this.filtros.unidadeId === 'todas' ? `<td><strong>${nomeUnidade}</strong></td>` : ''}
+            <td style="font-size: 0.85rem;">
+              <div style="color: var(--text-primary); font-weight: 600;">${inicio}</div>
+              <div style="color: var(--text-muted); font-size: 0.75rem;">Por: ${opAbertura}</div>
+            </td>
+            <td style="font-size: 0.85rem;">
+              <div style="color: var(--text-primary); font-weight: 600;">${fim}</div>
+              <div style="color: var(--text-muted); font-size: 0.75rem;">${t.status === 'fechado' ? `Por: ${opFecho}` : '---'}</div>
+            </td>
+            <td style="text-align: right; color: var(--text-secondary); font-size: 0.9rem;">R$ ${parseFloat(t.fundo_caixa || 0).toFixed(2)}</td>
+            <td style="text-align: right; font-weight: 700; color: var(--primary); font-size: 0.95rem;">R$ ${vendas.toFixed(2)}</td>
+            
+            <td style="text-align: right; color: var(--text-secondary); font-weight: 600; background: rgba(0,0,0,0.02);">R$ ${esperadoGaveta.toFixed(2)}</td>
+            <td style="text-align: right; color: var(--text-primary); font-weight: 700; background: rgba(0,0,0,0.02);">R$ ${contadoGaveta.toFixed(2)}</td>
+            
+            <td style="text-align: right;">${difHtml}</td>
+            <td style="text-align: center;">
+              ${t.status === 'fechado' ? `<button class="btn btn-sm btn-ghost" style="border: 1px solid var(--border-color);" onclick="dashboardModule.imprimirZPassado('${t.id}')" title="Reimprimir Relatório Z">🖨️</button>` : ''}
+            </td>
+          </tr>
+        `;
+      });
+    }
+
+    return `
+      <style>
+        .table-turnos { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
+        .table-turnos th, .table-turnos td { padding: 1rem; text-align: left; border-bottom: 1px solid var(--border-color); vertical-align: middle; }
+        .table-turnos th { background: var(--bg-secondary); position: sticky; top: 0; font-weight: 700; color: var(--text-secondary); text-transform: uppercase; font-size: 0.75rem; z-index: 10;}
+        .table-turnos tbody tr:hover { background: var(--bg-hover); }
+      </style>
+
+      <div class="card animate-fade-in" style="margin-bottom: 2.5rem; padding: 0; overflow: hidden; border: 1px solid var(--primary-light);">
+        <div class="card-header" style="background: rgba(232, 145, 58, 0.05); border-bottom: 1px solid var(--border-color); margin: 0; padding: 1.5rem;">
+          <h3 class="card-title">🔒 Auditoria de Caixas (Relatórios Z)</h3>
+        </div>
+        
+        <div style="width: 100%; overflow-x: auto;">
+          <table class="table-turnos">
+            <thead>
+              <tr>
+                <th>Status</th>
+                ${this.filtros.unidadeId === 'todas' ? '<th>Unidade</th>' : ''}
+                <th>Abertura</th>
+                <th>Fecho</th>
+                <th style="text-align: right;">Troco Inicial</th>
+                <th style="text-align: right;">Faturado (Liq)</th>
+                
+                <th style="text-align: right; background: rgba(0,0,0,0.02);">Gaveta (Esperado)</th>
+                <th style="text-align: right; background: rgba(0,0,0,0.02);">Gaveta (Contado)</th>
+                
+                <th style="text-align: right;">Auditoria</th>
+                <th style="text-align: center;">Ações</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${linhasHtml}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    `;
+  }
+
+  imprimirZPassado(turnoId) {
+    const turno = this.turnosAtuais.find(t => t.id === turnoId);
+    if (!turno) return;
+
+    let printDiv = document.getElementById('print-section');
+    if (!printDiv) { printDiv = document.createElement('div'); printDiv.id = 'print-section'; document.body.appendChild(printDiv); }
+    
+    const nomeUnidade = this.unidades.find(u => u.id === turno.unidade_id)?.nome || 'Unidade';
+    const inicio = new Date(turno.data_abertura).toLocaleString('pt-BR');
+    const fim = new Date(turno.data_fechamento).toLocaleString('pt-BR');
+    const operadorAbertura = this.usuariosMap[turno.usuario_abertura_id] || 'N/A';
+    const operadorFecho = this.usuariosMap[turno.usuario_fechamento_id] || 'N/A';
+
+    const formasHtml = Object.entries(turno.detalhes_pagamentos || {}).map(([forma, valor]) => `
+      <tr><td>${forma.toUpperCase()}:</td><td>R$ ${parseFloat(valor).toFixed(2)}</td></tr>
+    `).join('');
+
+    const html = `
+      <div class="ticket-header">
+        <div class="ticket-title">*** RELATÓRIO Z (VIA ADMIN) ***</div>
+        <div class="ticket-info">FECHO DE CAIXA</div>
+        <div class="ticket-divider"></div>
+        <div class="ticket-info" style="text-align: left;">
+          LOJA: ${nomeUnidade}<br>
+          ABERTURA: ${inicio}<br>
+          FECHO: ${fim}<br>
+          OP. ABERTURA: ${operadorAbertura}<br>
+          OP. FECHO: ${operadorFecho}<br>
+        </div>
+        <div class="ticket-divider"></div>
+      </div>
+      
+      <div style="font-weight: bold; margin-bottom: 5px; text-align: center;">RESUMO FINANCEIRO</div>
+      <table class="ticket-totals">
+        <tr><td>FUNDO DE CAIXA (TROCO):</td><td>R$ ${parseFloat(turno.fundo_caixa).toFixed(2)}</td></tr>
+        <tr><td colspan="2"><div class="ticket-divider"></div></td></tr>
+        
+        <tr><td colspan="2" style="font-weight: bold; padding-top: 5px;">RECEBIMENTOS DO TURNO:</td></tr>
+        ${formasHtml}
+        
+        <tr><td colspan="2"><div class="ticket-divider"></div></td></tr>
+        <tr><td class="bold">TOTAL FATURADO (LIQUIDO):</td><td class="bold">R$ ${parseFloat(turno.total_vendas).toFixed(2)}</td></tr>
+      </table>
+
+      <div class="ticket-divider"></div>
+      <div style="font-weight: bold; margin-bottom: 5px; text-align: center;">AUDITORIA DE GAVETA</div>
+      <table class="ticket-totals">
+        <tr><td>DINHEIRO ESPERADO (FUNDO + VENDAS):</td><td>R$ ${parseFloat(turno.total_dinheiro_sistema).toFixed(2)}</td></tr>
+        <tr><td>DINHEIRO DECLARADO PELO CAIXA:</td><td>R$ ${parseFloat(turno.total_dinheiro_informado).toFixed(2)}</td></tr>
+        <tr><td colspan="2"><div class="ticket-divider"></div></td></tr>
+        <tr>
+          <td class="bold">DIFERENÇA (QUEBRA/SOBRA):</td>
+          <td class="bold" style="color: ${turno.diferenca_caixa < 0 ? 'red' : 'black'};">R$ ${parseFloat(turno.diferenca_caixa).toFixed(2)}</td>
+        </tr>
+      </table>
+      
+      <div class="ticket-divider"></div>
+      <div class="ticket-footer">
+        <div>Relatório reimpresso via Painel Administrativo.</div>
+      </div>
+    `;
+    printDiv.innerHTML = html;
+    setTimeout(() => window.print(), 200);
   }
 
   renderGrafico() {

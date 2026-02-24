@@ -1,5 +1,5 @@
 /**
- * RICAZO - Módulo de Gestão de Produtos (Cards Premium, Combos e Soft Delete)
+ * RICAZO - Módulo de Gestão de Produtos (Pesquisa Inteligente, Grid Cards e Soft Delete)
  */
 
 class ProdutosModule {
@@ -8,11 +8,21 @@ class ProdutosModule {
     this.editingId = null;
     this.isComboMode = false;
     this.comboItems = []; 
+    this.termoBusca = ''; // Guarda o texto da pesquisa
+  }
+
+  // NOVO: Função de Mestre para remover acentos (Normalização NFD)
+  removerAcentos(texto) {
+    if (!texto) return '';
+    return texto.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
   }
 
   async load() {
     const container = document.getElementById('produtos-list');
     if (!container) return;
+
+    // Remove o display grid fixo imposto pelo dashboard para o módulo gerir o seu próprio layout
+    container.style.display = 'block'; 
 
     try {
       const { data, error } = await db.getClient()
@@ -24,7 +34,9 @@ class ProdutosModule {
       
       // Filtramos e mostramos apenas os que NÃO estão marcados como excluídos
       this.produtos = (data || []).filter(p => p.excluido !== true);
-      this.render(container);
+      
+      this.renderLayout(container);
+      this.renderGrid();
 
     } catch (error) {
       console.error('Erro ao carregar produtos:', error);
@@ -32,157 +44,84 @@ class ProdutosModule {
     }
   }
 
-  render(container) {
-    if (this.produtos.length === 0) {
-      container.innerHTML = `<div class="empty-state" style="grid-column: 1/-1;"><p>Nenhum produto cadastrado.</p></div>`;
+  // Desenha a Barra de Pesquisa e o Contentor da Grelha
+  renderLayout(container) {
+    container.innerHTML = `
+      <div style="margin-bottom: 1.5rem;">
+        <div style="position: relative; max-width: 100%;">
+          <span style="position: absolute; left: 1rem; top: 50%; transform: translateY(-50%); font-size: 1.2rem; color: var(--text-muted);">🔍</span>
+          <input type="text" class="form-input" id="busca-produtos" placeholder="Pesquisar produto ou combo por nome (ex: café ou cafe)..." 
+                 onkeyup="produtosModule.filtrar(this.value)" 
+                 style="padding-left: 2.8rem; height: 50px; font-size: 1.05rem; border-radius: var(--border-radius-lg); box-shadow: var(--shadow-sm); border: 1px solid var(--border-color); width: 100%;">
+        </div>
+      </div>
+      
+      <!-- GRELHA RESPONSIVA: auto-fill minmax faz os cartões ficarem lado a lado -->
+      <div id="produtos-grid" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(290px, 1fr)); gap: 1.25rem;">
+      </div>
+    `;
+  }
+
+  // Atualiza o termo (já sem acentos e em minúsculas) e renderiza apenas os cartões
+  filtrar(termo) {
+    this.termoBusca = this.removerAcentos(termo.toLowerCase());
+    this.renderGrid();
+  }
+
+  renderGrid() {
+    const grid = document.getElementById('produtos-grid');
+    if (!grid) return;
+
+    // Filtra a lista comparando o termo digitado com o nome do produto (ambos sem acentos)
+    const listaFiltrada = this.produtos.filter(p => {
+      const nomeLimpo = this.removerAcentos(p.nome.toLowerCase());
+      return nomeLimpo.includes(this.termoBusca);
+    });
+
+    if (listaFiltrada.length === 0) {
+      grid.innerHTML = `
+        <div class="empty-state" style="grid-column: 1/-1; padding: 4rem 2rem;">
+          <div style="font-size: 3rem; margin-bottom: 1rem;">🔎</div>
+          <p>Nenhum produto encontrado para a sua pesquisa.</p>
+        </div>
+      `;
       return;
     }
 
-    // Estrutura CSS injetada especificamente para garantir que o layout nunca quebra, nem nos ecrãs mais pequenos
-    container.innerHTML = `
-      <style>
-        .admin-produto-card {
-          background: var(--bg-card);
-          border-radius: var(--border-radius-lg);
-          border: 1px solid var(--border-color);
-          box-shadow: var(--shadow-sm);
-          padding: 1.25rem;
-          display: flex;
-          flex-direction: column;
-          gap: 1rem;
-          transition: var(--transition);
-        }
-        .admin-produto-card:hover {
-          border-color: var(--primary-light);
-          box-shadow: var(--shadow-md);
-          transform: translateY(-3px);
-        }
-        .apc-header {
-          display: flex;
-          justify-content: space-between;
-          align-items: flex-start;
-          gap: 0.5rem;
-        }
-        .apc-badges {
-          display: flex;
-          gap: 0.5rem;
-          flex-wrap: wrap;
-        }
-        .apc-badge {
-          font-size: 0.65rem;
-          font-weight: 700;
-          padding: 0.25rem 0.6rem;
-          border-radius: 12px;
-          text-transform: uppercase;
-          letter-spacing: 0.5px;
-          display: inline-flex;
-          align-items: center;
-        }
-        .apc-actions {
-          display: flex;
-          gap: 0.5rem;
-        }
-        .apc-btn {
-          background: var(--bg-secondary);
-          border: 1px solid var(--border-color);
-          width: 34px;
-          height: 34px;
-          border-radius: 8px;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          cursor: pointer;
-          transition: var(--transition);
-          font-size: 1rem;
-        }
-        .apc-btn:hover { background: var(--primary); border-color: var(--primary-dark); color: white !important; }
-        .apc-btn.btn-delete:hover { background: var(--danger); border-color: var(--danger); color: white !important; }
+    grid.innerHTML = listaFiltrada.map(p => `
+      <div class="admin-produto-card animate-fade-in" style="background: var(--bg-card); border-radius: var(--border-radius-lg); border: 1px solid var(--border-color); box-shadow: var(--shadow-sm); padding: 1.25rem; display: flex; flex-direction: column; justify-content: space-between; gap: 1rem; transition: transform 0.2s;">
         
-        .apc-body {
-          display: flex;
-          gap: 1rem;
-          align-items: center;
-        }
-        .apc-img {
-          width: 70px;
-          height: 70px;
-          border-radius: var(--border-radius);
-          background: var(--bg-secondary);
-          border: 1px solid rgba(0,0,0,0.05);
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          font-size: 2rem;
-          overflow: hidden;
-          flex-shrink: 0;
-        }
-        [data-theme="dark"] .apc-img { border-color: rgba(255,255,255,0.05); }
-        
-        .apc-info {
-          flex: 1;
-          min-width: 0;
-        }
-        .apc-nome {
-          font-size: 1.05rem;
-          font-weight: 700;
-          color: var(--text-primary);
-          line-height: 1.3;
-          margin-bottom: 0.25rem;
-          display: -webkit-box;
-          -webkit-line-clamp: 2;
-          -webkit-box-orient: vertical;
-          overflow: hidden;
-        }
-        .apc-preco {
-          font-size: 1.25rem;
-          font-weight: 800;
-          color: var(--primary);
-        }
-        .apc-unidade {
-          font-size: 0.75rem;
-          color: var(--text-muted);
-          font-weight: 600;
-          text-transform: uppercase;
-        }
-      </style>
-
-      ${this.produtos.map(p => `
-        <div class="admin-produto-card animate-fade-in">
-          
-          <!-- Linha Superior (Badges e Botões) -->
-          <div class="apc-header">
-            <div class="apc-badges">
-              <span class="apc-badge" style="background: ${p.ativo ? 'rgba(40,167,69,0.1)' : 'rgba(220,53,69,0.1)'}; color: ${p.ativo ? 'var(--success)' : 'var(--danger)'}; border: 1px solid ${p.ativo ? 'var(--success)' : 'var(--danger)'};">
-                ● ${p.ativo ? 'Ativo' : 'Inativo'}
-              </span>
-              ${p.is_combo ? `<span class="apc-badge" style="background: var(--primary); color: white;">📦 Combo</span>` : ''}
-            </div>
-            
-            <div class="apc-actions">
-              <button class="apc-btn" onclick="produtosModule.openModal('${p.id}')" title="Editar Produto">✏️</button>
-              ${(auth.isAdmin() || auth.isDev()) ? `
-                <button class="apc-btn btn-delete" onclick="produtosModule.excluir('${p.id}')" title="Excluir Produto" style="color: var(--danger); background: rgba(220,53,69,0.05);">🗑️</button>
-              ` : ''}
-            </div>
+        <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 0.5rem;">
+          <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
+            <span style="font-size: 0.65rem; font-weight: 700; padding: 0.25rem 0.6rem; border-radius: 12px; text-transform: uppercase; background: ${p.ativo ? 'rgba(40,167,69,0.1)' : 'rgba(220,53,69,0.1)'}; color: ${p.ativo ? 'var(--success)' : 'var(--danger)'}; border: 1px solid currentColor;">
+              ● ${p.ativo ? 'Ativo' : 'Inativo'}
+            </span>
+            ${p.is_combo ? `<span style="font-size: 0.65rem; font-weight: 700; padding: 0.25rem 0.6rem; border-radius: 12px; text-transform: uppercase; background: var(--primary); color: white;">📦 Combo</span>` : ''}
           </div>
           
-          <!-- Linha Inferior (Foto, Nome e Preço) -->
-          <div class="apc-body">
-            <div class="apc-img">
-              ${p.imagem_url ? `<img src="${p.imagem_url}" style="width:100%; height:100%; object-fit:cover;" onerror="this.style.display='none'">` : '🥖'}
-            </div>
-            <div class="apc-info">
-              <div class="apc-nome" title="${p.nome}">${p.nome}</div>
-              <div class="apc-preco">
-                R$ ${parseFloat(p.preco_base).toFixed(2)}
-                <span class="apc-unidade">/ ${p.tipo_preco === 'peso' ? 'KG' : 'UN'}</span>
-              </div>
-            </div>
+          <div style="display: flex; gap: 0.5rem;">
+            <button style="background: var(--bg-secondary); border: 1px solid var(--border-color); width: 34px; height: 34px; border-radius: 8px; cursor: pointer; font-size: 1rem; display: flex; align-items: center; justify-content: center;" onclick="produtosModule.openModal('${p.id}')" title="Editar Produto">✏️</button>
+            ${(auth.isAdmin() || auth.isDev()) ? `
+              <button style="background: rgba(220,53,69,0.05); border: 1px solid var(--danger); color: var(--danger); width: 34px; height: 34px; border-radius: 8px; cursor: pointer; font-size: 1rem; display: flex; align-items: center; justify-content: center;" onclick="produtosModule.excluir('${p.id}')" title="Excluir Produto">🗑️</button>
+            ` : ''}
           </div>
-
         </div>
-      `).join('')}
-    `;
+        
+        <div style="display: flex; gap: 1rem; align-items: center;">
+          <div style="width: 70px; height: 70px; border-radius: var(--border-radius); background: var(--bg-secondary); border: 1px solid rgba(0,0,0,0.05); display: flex; align-items: center; justify-content: center; font-size: 2rem; overflow: hidden; flex-shrink: 0;">
+            ${p.imagem_url ? `<img src="${p.imagem_url}" style="width:100%; height:100%; object-fit:cover;" onerror="this.style.display='none'">` : '🥖'}
+          </div>
+          <div style="flex: 1; min-width: 0;">
+            <div style="font-size: 1.05rem; font-weight: 700; color: var(--text-primary); line-height: 1.3; margin-bottom: 0.25rem; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;" title="${p.nome}">${p.nome}</div>
+            <div style="font-size: 1.25rem; font-weight: 800; color: var(--primary);">
+              R$ ${parseFloat(p.preco_base).toFixed(2)}
+              <span style="font-size: 0.75rem; color: var(--text-muted); font-weight: 600; text-transform: uppercase;">/ ${p.tipo_preco === 'peso' ? 'KG' : 'UN'}</span>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    `).join('');
   }
 
   async excluir(id) {
