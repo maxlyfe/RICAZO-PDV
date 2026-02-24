@@ -245,18 +245,40 @@ class RicaZoApp {
     }
 
     container.innerHTML = unidades.map(u => `
-      <div class="unidade-selecao-card" onclick="app.entrarUnidade('${u.id}')">
-        <div class="unidade-selecao-icone">
-          ${u.tipo === 'fabrica' ? '🏭' : u.tipo === 'loja' ? '🏪' : '📍'}
+      <div class="animate-fade-in" style="background: var(--bg-card); border-radius: var(--border-radius-lg); border: 2px solid var(--border-color); box-shadow: var(--shadow-sm); display: flex; flex-direction: column; transition: all 0.2s; cursor: pointer; padding: 0; overflow: hidden; height: 100%;" 
+           onclick="app.entrarUnidade('${u.id}')" 
+           onmouseover="this.style.borderColor='var(--primary)'; this.style.transform='translateY(-5px)'; this.style.boxShadow='var(--shadow-lg)';" 
+           onmouseout="this.style.borderColor='var(--border-color)'; this.style.transform='none'; this.style.boxShadow='var(--shadow-sm)';">
+
+        <div style="padding: 1.5rem; flex: 1; display: flex; flex-direction: column; gap: 1.25rem;">
+          
+          <!-- Cabeçalho do Cartão (Ícone e Nome completo) -->
+          <div style="display: flex; align-items: flex-start; gap: 1rem;">
+            <div style="width: 60px; height: 60px; border-radius: 16px; background: linear-gradient(135deg, var(--primary-light), var(--primary)); display: flex; align-items: center; justify-content: center; font-size: 2rem; color: white; box-shadow: var(--shadow-sm); flex-shrink: 0;">
+              ${u.tipo === 'fabrica' ? '🏭' : u.tipo === 'loja' ? '🏪' : '📍'}
+            </div>
+            <div style="flex: 1; min-width: 0;">
+              <div style="font-size: 0.75rem; color: var(--primary); font-weight: 800; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 0.25rem;">${this.formatTipoUnidade(u.tipo)}</div>
+              <div style="font-size: 1.25rem; font-weight: 800; color: var(--text-primary); line-height: 1.3; word-wrap: break-word;">${u.nome}</div>
+            </div>
+          </div>
+
+          <!-- Endereço (Só aparece se existir) -->
+          ${u.endereco ? `
+            <div style="font-size: 0.85rem; color: var(--text-secondary); display: flex; align-items: flex-start; gap: 0.5rem; background: var(--bg-secondary); padding: 0.75rem 1rem; border-radius: var(--border-radius); margin-top: auto;">
+              <span style="opacity: 0.7; font-size: 1rem; line-height: 1.2;">📍</span>
+              <span style="line-height: 1.4; word-wrap: break-word;">${u.endereco}</span>
+            </div>
+          ` : ''}
+          
         </div>
-        <div class="unidade-selecao-info">
-          <div class="unidade-selecao-nome">${u.nome}</div>
-          <div class="unidade-selecao-tipo">${this.formatTipoUnidade(u.tipo)}</div>
-          ${u.endereco ? `<div class="unidade-selecao-endereco">${u.endereco}</div>` : ''}
+
+        <!-- Rodapé do Cartão de Ação -->
+        <div style="background: rgba(232, 145, 58, 0.05); padding: 1rem 1.5rem; border-top: 1px solid var(--border-color); display: flex; align-items: center; justify-content: space-between;">
+          <span style="font-size: 0.85rem; font-weight: 600; color: var(--text-secondary);">Aceder à Operação</span>
+          <span style="font-weight: 800; color: var(--primary); font-size: 1rem;">Entrar →</span>
         </div>
-        <div class="unidade-selecao-acao">
-          <span class="btn btn-primary btn-sm">Entrar →</span>
-        </div>
+
       </div>
     `).join('');
   }

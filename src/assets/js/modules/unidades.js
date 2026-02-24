@@ -1,245 +1,229 @@
 /**
- * RICAZO - Módulo de Unidades
+ * RICAZO - Módulo de Gestão de Lojas e Fábricas (Com Telemetria em Tempo Real)
  */
 
 class UnidadesModule {
   constructor() {
     this.unidades = [];
+    this.vendasHoje = [];
+    this.vendasAbertas = [];
+    this.editingId = null;
+  }
+
+  // Função auxiliar usada pelo app.js para listar unidades no seletor inicial
+  getAll() {
+    return this.unidades;
   }
 
   async load() {
-    try {
-      // Se não for DEV, só carrega unidades do usuário
-      if (!auth.isDev()) {
-        this.unidades = auth.getUnidadesUsuario();
-        this.render();
-        return this.unidades;
-      }
-
-      // DEV carrega todas
-      this.unidades = await db.getAll('unidades', {
-        eq: { column: 'visivel', value: true },
-        order: { column: 'nome' }
-      });
-      
-      this.render();
-      return this.unidades;
-
-    } catch (error) {
-      console.error('Erro ao carregar unidades:', error);
-      this.renderError(error.message);
-    }
-  }
-
-  render() {
     const container = document.getElementById('unidades-list');
     if (!container) return;
 
-    const podeGerenciar = auth.podeGerenciarUnidades();
+    // Garante que o grid funciona na perfeição e se adapta ao ecrã
+    container.style.display = 'grid';
+    container.style.gridTemplateColumns = 'repeat(auto-fill, minmax(320px, 1fr))';
+    container.style.gap = '1.5rem';
 
-    if (this.unidades.length === 0) {
+    try {
+      // 1. Calcular a data de hoje para os filtros de vendas
+      const fusoOffset = new Date().getTimezoneOffset() * 60000;
+      const hojeStr = new Date(Date.now() - fusoOffset).toISOString().split('T')[0];
+      const dataInicioIso = `${hojeStr}T00:00:00.000Z`;
+
+      // 2. Consultas PARALELAS ao Supabase para máxima velocidade
+      const [resUnidades, resFechadas, resAbertas] = await Promise.all([
+        db.getClient().from('unidades').select('*').order('nome'),
+        db.getClient().from('vendas').select('unidade_id, total').eq('status', 'fechada').gte('data_fechamento', dataInicioIso),
+        db.getClient().from('vendas').select('unidade_id, itens:venda_itens(subtotal)').eq('status', 'aberta')
+      ]);
+
+      if (resUnidades.error) throw resUnidades.error;
+
+      this.unidades = resUnidades.data || [];
+      this.vendasHoje = resFechadas.data || [];
+      this.vendasAbertas = resAbertas.data || [];
+
+      this.render(container);
+    } catch (error) {
+      console.error('Erro ao carregar unidades:', error);
+      container.innerHTML = `<div class="text-center" style="color: var(--danger); grid-column: 1/-1;">❌ Erro ao carregar as Lojas e Fábricas.</div>`;
+    }
+  }
+
+  render(container) {
+    // Filtramos para não mostrar as que foram ocultadas (Soft Delete)
+    const ativas = this.unidades.filter(u => u.visivel !== false);
+
+    if (ativas.length === 0) {
       container.innerHTML = `
-        <div class="text-center" style="grid-column: 1/-1; padding: 3rem; color: var(--text-muted);">
-          <p>Nenhuma unidade disponível</p>
-          ${podeGerenciar ? '<p style="font-size: 0.875rem; margin-top: 0.5rem;">Clique em "Nova Unidade" para começar</p>' : ''}
+        <div class="empty-state" style="grid-column: 1/-1; padding: 4rem 2rem;">
+          <div style="font-size: 3rem; margin-bottom: 1rem;">🏪</div>
+          <p>Nenhuma loja ou fábrica cadastrada.</p>
         </div>
       `;
       return;
     }
 
-    container.innerHTML = this.unidades.map(u => this.cardHTML(u, podeGerenciar)).join('');
+    container.innerHTML = ativas.map(u => {
+      // MÁGICA 1: Somar Vendas Fechadas (Hoje)
+      const vendasDesta = this.vendasHoje.filter(v => v.unidade_id === u.id);
+      const totalHoje = vendasDesta.reduce((sum, v) => sum + parseFloat(v.total || 0), 0);
+
+      // MÁGICA 2: Somar Vendas Em Aberto (Mesas/Balcão rodando agora)
+      const abertasDesta = this.vendasAbertas.filter(v => v.unidade_id === u.id);
+      let totalAberto = 0;
+      abertasDesta.forEach(v => {
+         const sumItens = (v.itens || []).reduce((s, i) => s + parseFloat(i.subtotal || 0), 0);
+         totalAberto += sumItens;
+      });
+
+      const tipoFormatado = this.formatTipoUnidade(u.tipo);
+      const enderecoTxt = u.endereco ? ` • ${u.endereco}` : '';
+      const icone = u.tipo === 'fabrica' ? '🏭' : '🏪';
+
+      return `
+        <div class="admin-produto-card animate-fade-in" style="background: var(--bg-card); border-radius: var(--border-radius-lg); border: 1px solid var(--border-color); box-shadow: var(--shadow-sm); display: flex; flex-direction: column; transition: transform 0.2s; cursor: pointer;" onclick="app.entrarUnidade('${u.id}')" title="Aceder a ${u.nome}">
+          
+          <div style="padding: 1.5rem; flex: 1;">
+            <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 1rem;">
+              <div style="width: 45px; height: 45px; border-radius: var(--border-radius); background: var(--bg-secondary); border: 1px solid rgba(0,0,0,0.05); display: flex; align-items: center; justify-content: center; font-size: 1.5rem;">
+                ${icone}
+              </div>
+              <span style="font-size: 0.65rem; font-weight: 700; padding: 0.25rem 0.6rem; border-radius: 12px; text-transform: uppercase; background: rgba(40,167,69,0.1); color: var(--success); border: 1px solid currentColor;">
+                ● Ativa
+              </span>
+            </div>
+            
+            <div style="font-size: 1.1rem; font-weight: 800; color: var(--text-primary); margin-bottom: 0.25rem;">${u.nome}</div>
+            <div style="font-size: 0.75rem; color: var(--text-secondary); line-height: 1.4; height: 2.8em; overflow: hidden;">${tipoFormatado}${enderecoTxt}</div>
+
+            <!-- SEÇÃO DE TELEMETRIA (VALORES REAIS) -->
+            <div style="display: flex; justify-content: space-between; border-top: 1px solid var(--border-color); margin-top: 1rem; padding-top: 1.5rem;">
+              <div style="flex: 1; text-align: center; border-right: 1px solid var(--border-color); padding-right: 0.5rem;">
+                <div style="font-weight: 800; font-size: 1.1rem; color: var(--text-primary); margin-bottom: 0.25rem;">
+                  ${totalHoje > 0 ? `R$ ${totalHoje.toFixed(2)}` : '-'}
+                </div>
+                <div style="font-size: 0.65rem; color: var(--text-muted); text-transform: uppercase; font-weight: 700; letter-spacing: 0.5px;">Vendas Hoje</div>
+              </div>
+              
+              <div style="flex: 1; text-align: center; padding-left: 0.5rem;">
+                <div style="font-weight: 800; font-size: 1.1rem; color: ${totalAberto > 0 ? 'var(--warning)' : 'var(--text-primary)'}; margin-bottom: 0.25rem;">
+                  ${totalAberto > 0 ? `R$ ${totalAberto.toFixed(2)}` : '-'}
+                </div>
+                <div style="font-size: 0.65rem; color: var(--text-muted); text-transform: uppercase; font-weight: 700; letter-spacing: 0.5px;">Em Aberto</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- AÇÕES DO RODAPÉ (COM STOP PROPAGATION PARA NÃO NAVEGAR ACIDENTALMENTE) -->
+          <div style="background: var(--bg-secondary); padding: 1rem 1.5rem; border-top: 1px solid var(--border-color); display: flex; justify-content: flex-end; gap: 1rem; border-radius: 0 0 var(--border-radius-lg) var(--border-radius-lg);" onclick="event.stopPropagation();">
+            <button class="btn-ghost" style="color: var(--primary); font-size: 0.85rem; font-weight: 700; padding: 0; border: none; cursor: pointer;" onclick="event.stopPropagation(); unidadesModule.openModal('${u.id}')">✏️ Editar</button>
+            <button class="btn-ghost" style="color: var(--danger); font-size: 0.85rem; font-weight: 700; padding: 0; border: none; cursor: pointer;" onclick="event.stopPropagation(); unidadesModule.ocultar('${u.id}')">🗑️ Ocultar</button>
+          </div>
+
+        </div>
+      `;
+    }).join('');
   }
 
-  cardHTML(unidade, podeGerenciar) {
-    const isUnidadeDoUsuario = auth.getUnidadesUsuario().some(u => u.id === unidade.id);
-    const podeEntrar = auth.isDev() || isUnidadeDoUsuario;
-    
-    // Mapeamento de Ícones
-    const icones = { loja: '🏪', fabrica: '🏭', quiosque: '📍' };
-    const icone = icones[unidade.tipo] || '🏢';
-
-    return `
-      <div class="unidade-card-modern ${!podeEntrar ? 'disabled' : ''}" 
-           onclick="${podeEntrar ? `app.entrarUnidade('${unidade.id}')` : ''}"
-           style="${podeEntrar ? 'cursor: pointer;' : ''}">
-        
-        <div class="unidade-card-header">
-          <div class="unidade-icon-box">${icone}</div>
-          <div class="unidade-status-pill ${unidade.ativo ? 'active' : 'inactive'}">
-            ${unidade.ativo ? '🟢 Ativa' : '⚪ Inativa'}
-          </div>
-        </div>
-        
-        <div class="unidade-card-body">
-          <h3 class="unidade-title-modern">${unidade.nome}</h3>
-          <p class="unidade-subtitle-modern">
-            ${this.formatTipo(unidade.tipo)} 
-            ${unidade.endereco ? ` • ${unidade.endereco}` : ''}
-          </p>
-        </div>
-
-        <div class="unidade-card-stats-modern">
-          <div class="stat-item">
-            <span class="stat-value">-</span>
-            <span class="stat-label">Vendas Hoje</span>
-          </div>
-          <div class="stat-divider"></div>
-          <div class="stat-item">
-            <span class="stat-value">-</span>
-            <span class="stat-label">Em Aberto</span>
-          </div>
-        </div>
-
-        ${!podeEntrar ? `
-          <div class="unidade-no-access">🔒 Você não tem permissão de acesso</div>
-        ` : ''}
-
-        ${podeGerenciar ? `
-          <div class="unidade-card-footer">
-            <button class="btn-action-ghost edit" onclick="event.stopPropagation(); unidadesModule.editar('${unidade.id}')">
-              ✏️ Editar
-            </button>
-            <button class="btn-action-ghost delete" onclick="event.stopPropagation(); unidadesModule.ocultar('${unidade.id}')">
-              🗑️ Ocultar
-            </button>
-          </div>
-        ` : ''}
-      </div>
-    `;
-  }
-
-  formatTipo(tipo) {
-    const tipos = {
-      'loja': 'Loja',
-      'fabrica': 'Fábrica / Matriz',
-      'quiosque': 'Quiosque'
-    };
+  formatTipoUnidade(tipo) {
+    const tipos = { 'loja': 'Loja de Atendimento', 'fabrica': 'Fábrica / Matriz', 'quiosque': 'Quiosque Express' };
     return tipos[tipo] || tipo;
   }
 
-  renderError(msg) {
-    const container = document.getElementById('unidades-list');
-    if (container) {
-      container.innerHTML = `<div class="text-center" style="color: var(--danger); padding: 2rem;">❌ ${msg}</div>`;
+  // ==========================================
+  // FUNÇÕES DE CRIAÇÃO E EDIÇÃO
+  // ==========================================
+  async ocultar(id) {
+    const unidade = this.unidades.find(u => u.id === id);
+    if (!unidade) return;
+
+    if (confirm(`⚠️ Deseja realmente ocultar a unidade "${unidade.nome}"?\n\nEla deixará de aparecer nas listas do sistema, mas o histórico financeiro será preservado.`)) {
+      try {
+        await db.update('unidades', id, { visivel: false });
+        alert('✅ Unidade ocultada com sucesso!');
+        this.load(); 
+      } catch (error) {
+        alert('❌ Erro ao ocultar unidade: ' + error.message);
+      }
     }
   }
 
-  openModal(unidadeId = null) {
-    if (!auth.podeGerenciarUnidades()) {
-      alert('❌ Apenas DEV pode criar/editar unidades');
-      return;
-    }
+  openModal(id = null) {
+    this.editingId = id;
+    let u = { nome: '', tipo: 'loja', endereco: '' };
     
-    const isEdicao = unidadeId && unidadeId !== '';
-    const unidade = isEdicao ? this.unidades.find(u => u.id === unidadeId) : null;
+    if (id) {
+      const uni = this.unidades.find(x => x.id === id);
+      if (uni) u = { ...uni };
+    }
 
     const content = `
       <div class="card-header">
-        <h3 class="card-title">${isEdicao ? '✏️ Editar' : '🏪 Nova'} Unidade</h3>
+        <h3 class="card-title">${id ? '✏️ Editar Unidade' : '➕ Nova Unidade (Loja/Fábrica)'}</h3>
         <button class="btn btn-ghost btn-sm" onclick="modal.close()">✕</button>
       </div>
-      <form onsubmit="unidadesModule.salvar(event, '${unidadeId || ''}')">
-        ${modal.formGroup('Nome da Unidade *', `<input type="text" name="nome" class="form-input" required value="${unidade?.nome || ''}" placeholder="Ex: Loja Centro">`)}
+      <form onsubmit="unidadesModule.save(event)">
         
-        ${modal.formGroup('Tipo *', `
+        <div class="form-group">
+          <label class="form-label">Nome da Unidade *</label>
+          <input type="text" name="nome" class="form-input" required value="${u.nome}" placeholder="Ex: RicaZo Centro">
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Tipo de Unidade *</label>
           <select name="tipo" class="form-input" required>
-            <option value="">Selecione...</option>
-            <option value="loja" ${unidade?.tipo === 'loja' ? 'selected' : ''}>🏪 Loja</option>
-            <option value="fabrica" ${unidade?.tipo === 'fabrica' ? 'selected' : ''}>🏭 Fábrica</option>
-            <option value="quiosque" ${unidade?.tipo === 'quiosque' ? 'selected' : ''}>📍 Quiosque</option>
+            <option value="loja" ${u.tipo === 'loja' ? 'selected' : ''}>🏪 Loja (Vende ao Público)</option>
+            <option value="fabrica" ${u.tipo === 'fabrica' ? 'selected' : ''}>🏭 Fábrica / Matriz (Produz e Distribui)</option>
+            <option value="quiosque" ${u.tipo === 'quiosque' ? 'selected' : ''}>📍 Quiosque (Ponto Rápido)</option>
           </select>
-        `)}
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Endereço / Localização</label>
+          <input type="text" name="endereco" class="form-input" value="${u.endereco || ''}" placeholder="Ex: Rua das Pedras, 10 - Búzios">
+          <small style="color: var(--text-muted); margin-top: 0.25rem; display: block;">Esta informação sairá impressa nos talões/recibos.</small>
+        </div>
         
-        ${modal.formGroup('Endereço', `<input type="text" name="endereco" class="form-input" value="${unidade?.endereco || ''}" placeholder="Rua, número, bairro">`)}
-        
-        ${modal.formGroup('Telefone', `<input type="text" name="telefone" class="form-input" value="${unidade?.telefone || ''}" placeholder="(00) 00000-0000">`)}
-        
-        ${modal.actions('Cancelar', isEdicao ? 'Salvar Alterações' : 'Criar Unidade')}
+        ${modal.actions('Cancelar', 'Salvar Unidade')}
       </form>
     `;
     modal.open(content);
   }
 
-  async salvar(event, unidadeId = null) {
+  async save(event) {
     event.preventDefault();
     const form = event.target;
+    const btnSubmit = form.querySelector('button[type="submit"]');
     
-    const isEdicao = unidadeId && unidadeId !== '';
-    
+    btnSubmit.disabled = true;
+    btnSubmit.innerHTML = 'A guardar...';
+
     const dados = {
       nome: form.nome.value.trim(),
       tipo: form.tipo.value,
       endereco: form.endereco.value.trim(),
-      telefone: form.telefone.value.trim()
+      visivel: true
     };
 
     try {
-      if (isEdicao) {
-        await db.update('unidades', unidadeId, dados);
-        alert('✅ Unidade atualizada!');
+      if (this.editingId) {
+        await db.update('unidades', this.editingId, dados);
+        alert('✅ Unidade atualizada com sucesso!');
       } else {
-        await db.insert('unidades', [{
-          ...dados,
-          ativo: true,
-          visivel: true,
-          created_by: auth.getCurrentUser()?.id
-        }]);
-        alert('✅ Unidade criada!');
+        await db.insert('unidades', [dados]);
+        alert('✅ Nova unidade criada!');
       }
 
       modal.close();
-      await this.load();
+      this.load(); 
 
     } catch (error) {
-      console.error('Erro ao salvar:', error);
       alert('❌ Erro: ' + error.message);
+    } finally {
+      btnSubmit.disabled = false;
+      btnSubmit.innerHTML = 'Salvar Unidade';
     }
-  }
-
-  async ocultar(id) {
-    if (!confirm('Tem certeza que deseja ocultar esta unidade?')) return;
-    
-    try {
-      await db.update('unidades', id, { visivel: false, ativo: false });
-      await this.load();
-      alert('✅ Unidade ocultada!');
-    } catch (error) {
-      alert('❌ Erro: ' + error.message);
-    }
-  }
-
-  selecionar(id) {
-    const unidade = this.unidades.find(u => u.id === id);
-    if (!unidade) return;
-
-    // Verifica se tem acesso
-    const temAcesso = auth.isDev() || auth.getUnidadesUsuario().some(u => u.id === id);
-    if (!temAcesso) {
-      alert('❌ Você não tem acesso a esta unidade');
-      return;
-    }
-
-    // Redireciona baseado no tipo
-    if (unidade.tipo === 'fabrica') {
-      window.location.href = `/src/pages/dashboard/?view=producao&unidade=${id}`;
-    } else {
-      const perfis = auth.getCurrentUser()?.perfis || [];
-      if (perfis.includes('caixa')) {
-        window.location.href = `/src/pages/dashboard/?view=caixa&unidade=${id}`;
-      } else if (perfis.includes('pdv')) {
-        window.location.href = `/src/pages/dashboard/?view=pdv&unidade=${id}`;
-      } else {
-        window.location.href = `/src/pages/dashboard/?view=admin&unidade=${id}`;
-      }
-    }
-  }
-
-  editar(id) {
-    this.openModal(id);
-  }
-
-  getAll() {
-    return this.unidades;
   }
 }
 
