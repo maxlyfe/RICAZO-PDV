@@ -13,7 +13,7 @@ class CaixaModule {
     
     this.vendaSelecionada = null;
     this.pagamentosAtuais = [];
-    this.taxaServicoPercent = 0; // Controle da Taxa de Garçom
+    this.taxaServicoPercent = 0; 
     
     this.carrinhoBalcao = []; 
   }
@@ -67,7 +67,13 @@ class CaixaModule {
 
   async loadProdutos() {
     try {
-      const { data } = await db.getClient().from('produtos').select(`*, precos:produto_precos(*)`).eq('ativo', true).eq('visivel', true).order('nome');
+      // Carrega TODOS os produtos ativos para garantir que encontramos os componentes escondidos dos Combos
+      const { data } = await db.getClient()
+        .from('produtos')
+        .select(`*, precos:produto_precos(*)`)
+        .eq('ativo', true)
+        .order('nome');
+        
       this.produtos = (data || []).map(p => {
         const preco = p.precos?.find(pr => pr.unidade_id === this.unidadeAtual);
         return { ...p, preco_venda: preco ? preco.preco : p.preco_base };
@@ -151,7 +157,6 @@ class CaixaModule {
       const isUrgente = v.solicitou_fechamento && !isAtiva;
       const tempo = new Date(v.created_at).toLocaleTimeString('pt-BR', {hour: '2-digit', minute:'2-digit'});
       
-      // Subtotal dos itens puro para exibição na lista
       const subtotalItens = v.itens.reduce((sum, item) => sum + parseFloat(item.subtotal), 0);
 
       return `
@@ -171,12 +176,9 @@ class CaixaModule {
 
   selecionarVenda(id) {
     this.vendaSelecionada = id ? this.vendasAbertas.find(v => v.id === id) : null;
-    
-    // Se for mesa, aplica 10% por padrão. Se for balcão, 0%.
     if (this.vendaSelecionada) {
       this.taxaServicoPercent = this.vendaSelecionada.tipo === 'mesa' ? 10 : 0;
     }
-    
     this.pagamentosAtuais = [];
     this.renderListaComandas();
     this.renderDetalhesVenda();
@@ -208,7 +210,6 @@ class CaixaModule {
     const titulo = v.tipo === 'balcao' ? '🛒 Balcão' : `Mesa ${mesa ? mesa.numero : v.identificador}`;
     const abertPor = this.usuarios[v.usuario_abertura_id] || 'Desconhecido';
     
-    // CÁLCULO FINANCEIRO
     const subtotalItens = v.itens.reduce((sum, item) => sum + parseFloat(item.subtotal), 0);
     const valorTaxa = subtotalItens * (this.taxaServicoPercent / 100);
     const totalVenda = subtotalItens + valorTaxa;
@@ -235,14 +236,13 @@ class CaixaModule {
           <div style="display: flex; justify-content: space-between; padding: 0.75rem 0; border-bottom: 1px dashed var(--border-color);">
             <div>
               <div style="font-weight: 600; color: var(--text-primary);">${item.quantidade}x ${item.produto?.nome}</div>
-              <div style="font-size: 0.75rem; color: var(--text-muted);">Lançado por ${this.usuarios[item.usuario_id] || 'Sistema'} às ${new Date(item.created_at).toLocaleTimeString('pt-BR', {hour: '2-digit', minute:'2-digit'})}</div>
+              <div style="font-size: 0.75rem; color: var(--text-muted);">Lançado por ${this.usuarios[item.usuario_id] || 'Sistema'}</div>
             </div>
             <div style="font-weight: 700; color: var(--text-primary);">R$ ${parseFloat(item.subtotal).toFixed(2)}</div>
           </div>
         `).join('')}
       </div>
 
-      <!-- CONTROLE DE TAXA DE SERVIÇO (SÓ PARA MESAS) -->
       ${v.tipo === 'mesa' ? `
         <div style="background: var(--bg-secondary); padding: 1rem 1.5rem; border-top: 1px solid var(--border-color); display: flex; justify-content: space-between; align-items: center; flex-shrink: 0;">
           <div>
@@ -260,7 +260,6 @@ class CaixaModule {
         </div>
       ` : ''}
       
-      <!-- ÁREA DE PAGAMENTO -->
       <div style="background: var(--bg-primary); border-top: 1px solid var(--border-color); padding: 1.5rem; flex-shrink: 0;">
         ${this.pagamentosAtuais.length > 0 ? `
           <div style="margin-bottom: 1.5rem;">
@@ -318,12 +317,7 @@ class CaixaModule {
       return;
     }
 
-    this.pagamentosAtuais.push({
-      forma_id: formaId,
-      forma_nome: formaNome,
-      valor: valor
-    });
-
+    this.pagamentosAtuais.push({ forma_id: formaId, forma_nome: formaNome, valor: valor });
     this.renderDetalhesVenda();
   }
 
@@ -340,7 +334,6 @@ class CaixaModule {
       const vId = this.vendaSelecionada.id;
       const usuarioId = auth.getCurrentUser()?.id;
 
-      // Recalcula totais com a taxa final
       const subtotalVenda = this.vendaSelecionada.itens.reduce((sum, item) => sum + parseFloat(item.subtotal), 0);
       const valorTaxa = subtotalVenda * (this.taxaServicoPercent / 100);
       const totalVendaFinal = subtotalVenda + valorTaxa;
@@ -367,10 +360,10 @@ class CaixaModule {
       // 1. Salva Pagamentos
       await db.insert('pagamentos', insertsPgto);
       
-      // 2. Baixa Estoque
+      // 2. BAIXA INTELIGENTE DE ESTOQUE (Explosão de Combos)
       await this.baixarEstoque(this.vendaSelecionada, usuarioId);
 
-      // 3. Atualiza Venda (Salva o Total Final e a Taxa Aplicada)
+      // 3. Atualiza Venda
       await db.update('vendas', vId, {
         status: 'fechada',
         total: totalVendaFinal,
@@ -379,7 +372,7 @@ class CaixaModule {
         usuario_fechamento_id: usuarioId
       });
 
-      // 4. Imprime Ticket (Passamos os clones para não depender do estado que será limpo)
+      // 4. Imprime Ticket
       this.imprimirTicket({ ...this.vendaSelecionada }, [...this.pagamentosAtuais], trocoTotalImpressao, subtotalVenda, valorTaxa, this.taxaServicoPercent);
 
       this.vendaSelecionada = null;
@@ -392,7 +385,74 @@ class CaixaModule {
     }
   }
 
-  // MOTOR DE IMPRESSÃO
+  // =========================================================================
+  // SISTEMA DE ESTOQUE AVANÇADO (Ficha Técnica / Combos)
+  // =========================================================================
+  async baixarEstoque(venda, usuarioId) {
+    for (const item of venda.itens) {
+      // Localiza a Ficha do Produto vendido para verificar se é um Combo
+      const produtoFull = this.produtos.find(p => p.id === item.produto_id);
+
+      if (produtoFull && produtoFull.is_combo && produtoFull.itens_combo && produtoFull.itens_combo.length > 0) {
+        // É UM COMBO! Desmembra e deduz as matérias-primas físicas
+        for (const componente of produtoFull.itens_combo) {
+          const qtdTotalComponente = parseFloat(componente.quantidade) * parseFloat(item.quantidade);
+          await this.registrarSaidaEstoque(
+            componente.produto_id, 
+            qtdTotalComponente, 
+            usuarioId, 
+            `Combo Vendido (${produtoFull.nome}) - ${venda.tipo === 'balcao' ? 'Balcão' : 'Mesa'}`
+          );
+        }
+      } else {
+        // PRODUTO NORMAL
+        await this.registrarSaidaEstoque(
+          item.produto_id, 
+          parseFloat(item.quantidade), 
+          usuarioId, 
+          `Venda ${venda.tipo === 'balcao' ? 'Balcão' : 'Mesa'}`
+        );
+      }
+    }
+  }
+
+  async registrarSaidaEstoque(produtoId, quantidadeSaida, usuarioId, observacao) {
+    const { data: est } = await db.getClient()
+      .from('estoque')
+      .select('*')
+      .eq('produto_id', produtoId)
+      .eq('unidade_id', this.unidadeAtual)
+      .single();
+
+    const qtdAnterior = est ? parseFloat(est.quantidade) : 0;
+    const novaQtd = qtdAnterior - quantidadeSaida;
+
+    if (est) {
+      await db.update('estoque', est.id, { quantidade: novaQtd, updated_by: usuarioId });
+    } else {
+      await db.insert('estoque', [{ 
+        unidade_id: this.unidadeAtual, 
+        produto_id: produtoId, 
+        quantidade: novaQtd, 
+        updated_by: usuarioId 
+      }]);
+    }
+
+    await db.insert('estoque_movimentacao', [{
+      unidade_id: this.unidadeAtual,
+      produto_id: produtoId,
+      tipo: 'saida',
+      quantidade: -quantidadeSaida,
+      quantidade_anterior: qtdAnterior,
+      quantidade_nova: novaQtd,
+      usuario_id: usuarioId,
+      observacao: observacao
+    }]);
+  }
+
+  // ==========================================
+  // IMPRESSÃO E BALCÃO 
+  // ==========================================
   imprimirTicket(venda, pagamentos, trocoTotal, subtotal, taxaValor, taxaPercent) {
     let printDiv = document.getElementById('print-section');
     if (!printDiv) {
@@ -418,96 +478,28 @@ class CaixaModule {
         <div class="ticket-info">PEDIDO: #${venda.id.substring(0,8).toUpperCase()} - <strong>${identificador}</strong></div>
         <div class="ticket-divider"></div>
       </div>
-      
       <table class="ticket-table">
-        <thead>
-          <tr>
-            <th>QTD</th>
-            <th>PRODUTO</th>
-            <th>TOTAL</th>
-          </tr>
-        </thead>
+        <thead><tr><th>QTD</th><th>PRODUTO</th><th>TOTAL</th></tr></thead>
         <tbody>
-          ${venda.itens.map(i => `
-            <tr>
-              <td>${i.quantidade}</td>
-              <td>${i.produto?.nome}</td>
-              <td>R$ ${parseFloat(i.subtotal).toFixed(2)}</td>
-            </tr>
-          `).join('')}
+          ${venda.itens.map(i => `<tr><td>${i.quantidade}</td><td>${i.produto?.nome}</td><td>R$ ${parseFloat(i.subtotal).toFixed(2)}</td></tr>`).join('')}
         </tbody>
       </table>
-      
       <div class="ticket-divider"></div>
-      
       <table class="ticket-totals">
-        <tr>
-          <td>SUBTOTAL:</td>
-          <td>R$ ${subtotal.toFixed(2)}</td>
-        </tr>
-        ${taxaValor > 0 ? `
-        <tr>
-          <td>TAXA SERVIÇO (${taxaPercent}%):</td>
-          <td>R$ ${taxaValor.toFixed(2)}</td>
-        </tr>
-        ` : ''}
-        <tr>
-          <td class="bold">TOTAL A PAGAR:</td>
-          <td class="bold">R$ ${(subtotal + taxaValor).toFixed(2)}</td>
-        </tr>
+        <tr><td>SUBTOTAL:</td><td>R$ ${subtotal.toFixed(2)}</td></tr>
+        ${taxaValor > 0 ? `<tr><td>TAXA SERVIÇO (${taxaPercent}%):</td><td>R$ ${taxaValor.toFixed(2)}</td></tr>` : ''}
+        <tr><td class="bold">TOTAL A PAGAR:</td><td class="bold">R$ ${(subtotal + taxaValor).toFixed(2)}</td></tr>
         <tr><td colspan="2"><div style="height:5px;"></div></td></tr>
-        
-        ${pagamentos.map(p => `
-          <tr>
-            <td>${p.forma_nome.toUpperCase()}:</td>
-            <td>R$ ${p.valor.toFixed(2)}</td>
-          </tr>
-        `).join('')}
-        <tr>
-          <td>TROCO:</td>
-          <td class="bold">R$ ${trocoTotal.toFixed(2)}</td>
-        </tr>
+        ${pagamentos.map(p => `<tr><td>${p.forma_nome.toUpperCase()}:</td><td>R$ ${p.valor.toFixed(2)}</td></tr>`).join('')}
+        <tr><td>TROCO:</td><td class="bold">R$ ${trocoTotal.toFixed(2)}</td></tr>
       </table>
-      
       <div class="ticket-divider"></div>
-      <div class="ticket-footer">
-        <div style="font-weight: bold; margin-bottom: 5px;">OBRIGADO PELA PREFERÊNCIA!</div>
-        <div>Volte Sempre</div>
-      </div>
+      <div class="ticket-footer"><div style="font-weight: bold; margin-bottom: 5px;">OBRIGADO PELA PREFERÊNCIA!</div></div>
     `;
-    
     printDiv.innerHTML = html;
-    
-    setTimeout(() => {
-      window.print();
-    }, 150);
+    setTimeout(() => window.print(), 150);
   }
 
-  async baixarEstoque(venda, usuarioId) {
-    for (const item of venda.itens) {
-      const { data: est } = await db.getClient().from('estoque').select('*').eq('produto_id', item.produto_id).eq('unidade_id', this.unidadeAtual).single();
-      const qtdAnterior = est ? parseFloat(est.quantidade) : 0;
-      const novaQtd = qtdAnterior - parseFloat(item.quantidade);
-
-      if (est) await db.update('estoque', est.id, { quantidade: novaQtd, updated_by: usuarioId });
-      else await db.insert('estoque', [{ unidade_id: this.unidadeAtual, produto_id: item.produto_id, quantidade: novaQtd, updated_by: usuarioId }]);
-
-      await db.insert('estoque_movimentacao', [{
-        unidade_id: this.unidadeAtual,
-        produto_id: item.produto_id,
-        tipo: 'saida',
-        quantidade: -parseFloat(item.quantidade),
-        quantidade_anterior: qtdAnterior,
-        quantidade_nova: novaQtd,
-        usuario_id: usuarioId,
-        observacao: `Venda ${venda.tipo === 'balcao' ? 'Balcão' : 'Mesa'}`
-      }]);
-    }
-  }
-
-  // ==========================================
-  // VENDA RÁPIDA (MINI-PDV DO CAIXA)
-  // ==========================================
   abrirModalNovaVendaRápida() {
     this.carrinhoBalcao = [];
     const content = `
@@ -519,12 +511,10 @@ class CaixaModule {
         .produto-venda-card-otimizado { background: var(--bg-primary); border: 2px solid var(--border-color); border-radius: var(--border-radius-lg); padding: 1rem; text-align: center; cursor: pointer; transition: var(--transition); display: flex; flex-direction: column; align-items: center; gap: 0.75rem; }
         .produto-venda-card-otimizado:hover { border-color: var(--primary); transform: translateY(-4px); box-shadow: var(--shadow-md); }
       </style>
-      
       <div class="card-header">
         <h3 class="card-title">🛒 Nova Venda Rápida (Balcão)</h3>
         <button class="btn btn-ghost btn-sm" onclick="modal.close()">✕</button>
       </div>
-      
       <div class="mini-pdv-grid">
         <div class="painel-produtos" style="box-shadow: none; border: 1px solid var(--border-color);">
           <div class="painel-produtos-header">
@@ -556,8 +546,9 @@ class CaixaModule {
   }
 
   renderProdutosBalcao(lista) {
-    if (lista.length === 0) return `<div style="grid-column: 1/-1; text-align: center; color: var(--text-muted); padding: 2rem;">Nenhum produto encontrado.</div>`;
-    return lista.map(p => `
+    const visiveis = lista.filter(p => p.visivel); // Mostra apenas os criados para PDV
+    if (visiveis.length === 0) return `<div style="grid-column: 1/-1; text-align: center; color: var(--text-muted); padding: 2rem;">Nenhum produto visível encontrado.</div>`;
+    return visiveis.map(p => `
       <div class="produto-venda-card-otimizado" onclick="caixaModule.addCarrinhoBalcao('${p.id}')">
         <div style="width: 80px; height: 80px; flex-shrink: 0; background: var(--bg-secondary); border-radius: var(--border-radius); display: flex; align-items: center; justify-content: center; overflow: hidden; box-shadow: var(--shadow-sm);">
           ${p.imagem_url ? `<img src="${p.imagem_url}" style="width: 100%; height: 100%; object-fit: cover;" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';"><div style="display:none; font-size: 2rem;">🥖</div>` : '<div style="font-size: 2rem;">🥖</div>'}

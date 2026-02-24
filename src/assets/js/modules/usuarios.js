@@ -97,8 +97,9 @@ class UsuariosModule {
       return;
     }
 
+    // REGRA DE SEGURANÇA: Filtra o perfil 'dev' para não aparecer nas opções de criação
     const perfisDisponiveis = Object.entries(CONFIG.PERFIS_LABELS)
-      .filter(([key]) => auth.podeCriarPerfil(key))
+      .filter(([key]) => key !== 'dev' && auth.podeCriarPerfil(key))
       .map(([key, label]) => `
         <label style="display: flex; align-items: center; gap: 0.5rem; padding: 0.5rem 1rem; background: var(--bg-secondary); border-radius: var(--border-radius); cursor: pointer;">
           <input type="checkbox" name="perfis" value="${key}">
@@ -200,7 +201,10 @@ class UsuariosModule {
       return `<option value="${u.id}" ${selecionado ? 'selected' : ''}>${u.nome}</option>`;
     }).join('');
 
-    const perfisCheckboxes = Object.entries(CONFIG.PERFIS_LABELS).map(([key, label]) => {
+    // REGRA DE SEGURANÇA: Filtra o perfil 'dev' para não aparecer nas opções de edição
+    const perfisCheckboxes = Object.entries(CONFIG.PERFIS_LABELS)
+      .filter(([key]) => key !== 'dev')
+      .map(([key, label]) => {
       const selecionado = usuario.perfis.some(p => p.perfil === key);
       return `
         <label style="display: flex; align-items: center; gap: 0.5rem; padding: 0.5rem 1rem; background: var(--bg-secondary); border-radius: var(--border-radius); cursor: pointer;">
@@ -230,6 +234,7 @@ class UsuariosModule {
           <label class="form-label">Perfis *</label>
           <div style="display: flex; flex-wrap: wrap; gap: 0.5rem; margin-top: 0.5rem;">
             ${perfisCheckboxes}
+            ${usuario.perfis.some(p => p.perfil === 'dev') ? `<span class="perfil-badge perfil-dev" style="opacity: 0.7;" title="Perfil protegido pelo banco de dados">DEV (Protegido)</span>` : ''}
           </div>
         </div>
 
@@ -251,7 +256,17 @@ class UsuariosModule {
     event.preventDefault();
     const form = event.target;
     
+    // Verifica se o usuário editado JÁ ERA dev no banco de dados
+    const usuarioOriginal = this.usuarios.find(u => u.id === id);
+    const eraDev = usuarioOriginal?.perfis.some(p => p.perfil === 'dev');
+
     const perfisSelecionados = Array.from(form.querySelectorAll('input[name="perfis"]:checked')).map(cb => cb.value);
+    
+    // TRAVA DE SEGURANÇA: Injeta o 'dev' de volta para não apagar sem querer o acesso de um Dev
+    if (eraDev && !perfisSelecionados.includes('dev')) {
+      perfisSelecionados.push('dev');
+    }
+
     const unidadesSelecionadas = Array.from(form.unidades.selectedOptions).map(opt => opt.value).filter(v => v);
 
     if (perfisSelecionados.length === 0) {

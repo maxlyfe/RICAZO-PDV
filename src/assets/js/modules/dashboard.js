@@ -1,5 +1,5 @@
 /**
- * RICAZO - Módulo Dashboard (Inteligência Financeira e Auditoria)
+ * RICAZO - Módulo Dashboard (Inteligência Financeira Avançada)
  */
 
 class DashboardModule {
@@ -7,59 +7,96 @@ class DashboardModule {
     this.chartInstance = null;
     this.unidades = [];
     this.usuariosMap = {}; 
-    this.mesasMap = {}; // NOVO: Mapear IDs de mesas para nomes
-    this.vendasAtuais = []; // Guarda as vendas para usar no modal
+    this.mesasMap = {}; 
+    this.formasMap = {}; 
+    this.vendasAtuais = []; 
     
+    this.telaAtual = 'resumo'; // 'resumo' | 'auditoria'
+    
+    // Ajuste de fuso horário seguro para o formato YYYY-MM-DD
     const hoje = new Date();
-    const ano = hoje.getFullYear();
-    const mes = String(hoje.getMonth() + 1).padStart(2, '0');
+    const fusoOffset = hoje.getTimezoneOffset() * 60000;
+    const dataLocal = new Date(hoje.getTime() - fusoOffset);
+    const hojeStr = dataLocal.toISOString().split('T')[0];
     
+    // Primeiro dia do mês corrente
+    const primeiroDiaMes = new Date(dataLocal.getFullYear(), dataLocal.getMonth(), 1);
+    const priDiaStr = primeiroDiaMes.toISOString().split('T')[0];
+    
+    // NOVO: Inicializa o Resumo Gráfico com o Mês Corrente
     this.filtros = {
       unidadeId: 'todas',
-      mesAno: `${ano}-${mes}`
+      dataInicio: priDiaStr,
+      dataFim: hojeStr
     };
+
+    // Dados processados globais para o gráfico ler
+    this.dadosGraficoCompletos = [];
   }
 
   async carregarEstatisticas() {
     const container = document.getElementById('admin-dashboard-stats');
     if (!container) return;
 
-    if (!document.getElementById('dashboard-filtros')) {
+    if (!document.getElementById('dashboard-wrapper')) {
       this.renderBaseUI(container);
       await Promise.all([
         this.carregarUnidadesFiltro(),
         this.carregarUsuariosMap(),
-        this.carregarMesasMap() // Carrega as mesas
+        this.carregarMesasMap(),
+        this.carregarFormasMap()
       ]);
     }
 
     await this.processarDados();
   }
 
+  // Ícones inteligentes para as formas de pagamento
+  getIconePagamento(nomeForma) {
+    if (!nomeForma) return '🪙';
+    const n = nomeForma.toLowerCase();
+    if (n.includes('pix')) return '💠';
+    if (n.includes('dinheiro')) return '💵';
+    if (n.includes('crédito') || n.includes('credito')) return '💳';
+    if (n.includes('débito') || n.includes('debito')) return '🏧';
+    return '🪙';
+  }
+
   renderBaseUI(container) {
     container.innerHTML = `
-      <div class="card" style="margin-bottom: 1.5rem; padding: 0; overflow: hidden;" id="dashboard-filtros">
-        <div style="padding: 1.5rem 1.5rem 0.5rem 1.5rem; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem;">
-          <h3 class="card-title" style="margin: 0; font-size: 1.25rem;">📊 Visão Geral Financeira</h3>
-          <div style="display: flex; gap: 1rem; align-items: center;">
-            <span style="font-size: 0.85rem; color: var(--text-secondary); font-weight: 600; text-transform: uppercase;">Período:</span>
-            <input type="month" id="filtro-mes-dash" class="form-input" style="width: auto; padding: 0.4rem 1rem; cursor: pointer;" value="${this.filtros.mesAno}" onchange="dashboardModule.atualizarFiltroMes()">
+      <div id="dashboard-wrapper">
+        
+        <!-- CABEÇALHO E ABAS DE NAVEGAÇÃO -->
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; flex-wrap: wrap; gap: 1rem;">
+          <div style="display: flex; gap: 0.5rem; background: var(--bg-secondary); padding: 0.5rem; border-radius: var(--border-radius-lg); border: 1px solid var(--border-color);">
+            <button id="tab-resumo" class="btn btn-primary" style="border-radius: var(--border-radius); padding: 0.5rem 1rem;" onclick="dashboardModule.mudarTela('resumo')">📊 Resumo Gráfico</button>
+            <button id="tab-auditoria" class="btn btn-ghost" style="border-radius: var(--border-radius); padding: 0.5rem 1rem;" onclick="dashboardModule.mudarTela('auditoria')">🧾 Histórico de Vendas</button>
           </div>
         </div>
-        <div id="dashboard-unidades-botoes" style="display: flex; gap: 0.5rem; flex-wrap: wrap; padding: 0 1.5rem 1.5rem 1.5rem; border-bottom: 1px solid var(--border-color);"></div>
-      </div>
-      
-      <div id="dashboard-metricas"></div>
-      
-      <div class="card" style="margin-bottom: 1.5rem; position: relative; height: 350px;">
-        <canvas id="faturamentoChart"></canvas>
-      </div>
 
-      <!-- NOVO: Botão para abrir o Modal de Auditoria em vez de exibir a lista enorme -->
-      <div style="text-align: right; margin-bottom: 2.5rem;">
-        <button class="btn btn-secondary" style="font-weight: 700; padding: 0.75rem 1.5rem; border: 2px solid var(--border-color);" onclick="dashboardModule.abrirModalAuditoria()">
-          🧾 Ver Histórico Detalhado de Vendas
-        </button>
+        <!-- FILTROS PRINCIPAIS -->
+        <div class="card" style="margin-bottom: 1.5rem; padding: 0; overflow: hidden;" id="dashboard-filtros">
+          <div style="padding: 1.5rem 1.5rem 0.5rem 1.5rem; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem;">
+            <h3 class="card-title" style="margin: 0; font-size: 1.25rem;">Filtros de Auditoria</h3>
+            
+            <div style="display: flex; gap: 1rem; align-items: center; flex-wrap: wrap;">
+              <div style="display: flex; align-items: center; gap: 0.5rem;">
+                <span style="font-size: 0.75rem; color: var(--text-secondary); font-weight: 700; text-transform: uppercase;">De:</span>
+                <input type="date" id="filtro-data-inicio" class="form-input" style="padding: 0.4rem 0.75rem; font-size: 0.9rem;" value="${this.filtros.dataInicio}" onchange="dashboardModule.atualizarFiltros()">
+              </div>
+              <div style="display: flex; align-items: center; gap: 0.5rem;">
+                <span style="font-size: 0.75rem; color: var(--text-secondary); font-weight: 700; text-transform: uppercase;">Até:</span>
+                <input type="date" id="filtro-data-fim" class="form-input" style="padding: 0.4rem 0.75rem; font-size: 0.9rem;" value="${this.filtros.dataFim}" onchange="dashboardModule.atualizarFiltros()">
+              </div>
+            </div>
+          </div>
+          <div id="dashboard-unidades-botoes" style="display: flex; gap: 0.5rem; flex-wrap: wrap; padding: 0 1.5rem 1.5rem 1.5rem; border-bottom: 1px solid var(--border-color);"></div>
+        </div>
+        
+        <!-- CONTENTOR DINÂMICO (Gráficos ou Tabela) -->
+        <div id="dashboard-dynamic-content">
+           <div class="text-center" style="padding: 3rem;"><div class="spinner"></div></div>
+        </div>
       </div>
     `;
   }
@@ -79,14 +116,17 @@ class DashboardModule {
     } catch (error) {}
   }
 
-  // NOVO: Carregar mapa de Mesas para traduzir o ID
   async carregarMesasMap() {
     try {
       const { data } = await db.getClient().from('unidade_mesas').select('id, numero, nome');
-      this.mesasMap = (data || []).reduce((acc, m) => { 
-        acc[m.id] = m.nome || `Mesa ${m.numero}`; 
-        return acc; 
-      }, {});
+      this.mesasMap = (data || []).reduce((acc, m) => { acc[m.id] = m.nome || `Mesa ${m.numero}`; return acc; }, {});
+    } catch (error) {}
+  }
+
+  async carregarFormasMap() {
+    try {
+      const { data } = await db.getClient().from('formas_pagamento').select('id, nome');
+      this.formasMap = (data || []).reduce((acc, f) => { acc[f.id] = f.nome; return acc; }, {});
     } catch (error) {}
   }
 
@@ -105,34 +145,70 @@ class DashboardModule {
   mudarUnidadeFiltro(unidadeId) {
     this.filtros.unidadeId = unidadeId;
     this.renderUnidadesBotoes(); 
-    
-    // Se o modal estiver aberto, atualiza os botões de lá também
-    if (document.getElementById('modal-filtros-auditoria')) {
-      this.renderBotoesModal();
-    }
-
     this.processarDados(); 
   }
 
-  atualizarFiltroMes() {
-    this.filtros.mesAno = document.getElementById('filtro-mes-dash').value;
+  atualizarFiltros() {
+    const dInicio = document.getElementById('filtro-data-inicio').value;
+    const dFim = document.getElementById('filtro-data-fim').value;
+    if (dInicio && dFim) {
+      this.filtros.dataInicio = dInicio;
+      this.filtros.dataFim = dFim;
+      this.processarDados();
+    }
+  }
+
+  mudarTela(tela) {
+    if (this.telaAtual === tela) return; // Evita recarregar se já estiver na tela certa
+    
+    this.telaAtual = tela;
+    
+    document.getElementById('tab-resumo').className = tela === 'resumo' ? 'btn btn-primary' : 'btn btn-ghost';
+    document.getElementById('tab-auditoria').className = tela === 'auditoria' ? 'btn btn-primary' : 'btn btn-ghost';
+    
+    // MÁGICA DOS FILTROS INTELIGENTES AO MUDAR DE ABA
+    const hoje = new Date();
+    const fusoOffset = hoje.getTimezoneOffset() * 60000;
+    const dataLocal = new Date(hoje.getTime() - fusoOffset);
+    const hojeStr = dataLocal.toISOString().split('T')[0];
+    
+    if (tela === 'auditoria') {
+      // Ao entrar no histórico de vendas, filtra automaticamente por HOJE
+      this.filtros.dataInicio = hojeStr;
+      this.filtros.dataFim = hojeStr;
+    } else {
+      // Ao voltar para o resumo, mostra o MÊS CORRENTE
+      const primeiroDiaMes = new Date(dataLocal.getFullYear(), dataLocal.getMonth(), 1);
+      this.filtros.dataInicio = primeiroDiaMes.toISOString().split('T')[0];
+      this.filtros.dataFim = hojeStr;
+    }
+
+    // Atualiza os inputs na tela
+    const inputInicio = document.getElementById('filtro-data-inicio');
+    const inputFim = document.getElementById('filtro-data-fim');
+    if (inputInicio) inputInicio.value = this.filtros.dataInicio;
+    if (inputFim) inputFim.value = this.filtros.dataFim;
+
+    // Processa os dados de novo usando as datas adequadas
     this.processarDados();
   }
 
   async processarDados() {
     try {
-      const [anoStr, mesStr] = this.filtros.mesAno.split('-');
-      const ano = parseInt(anoStr);
-      const mes = parseInt(mesStr) - 1; 
+      const container = document.getElementById('dashboard-dynamic-content');
+      if (container && this.vendasAtuais.length === 0) {
+        container.innerHTML = `<div class="text-center" style="padding: 3rem;"><div class="spinner" style="margin: 0 auto 1rem;"></div><p>A calcular...</p></div>`;
+      }
 
-      const dataInicio = new Date(ano, mes, 1);
-      const dataFim = new Date(ano, mes + 1, 0, 23, 59, 59, 999);
+      // Adiciona horários limite para as datas do filtro
+      const dataInicioIso = `${this.filtros.dataInicio}T00:00:00.000Z`;
+      const dataFimIso = `${this.filtros.dataFim}T23:59:59.999Z`;
       
-      const dataInicioIso = dataInicio.toISOString();
-      const dataFimIso = dataFim.toISOString();
-      const hoje = new Date();
-      const strHoje = hoje.toISOString().split('T')[0];
+      // Ajuste para o "Hoje" real do fuso horário
+      const fusoOffset = new Date().getTimezoneOffset() * 60000;
+      const hojeStr = new Date(Date.now() - fusoOffset).toISOString().split('T')[0];
 
+      // 1. Busca Vendas
       let query = db.getClient()
         .from('vendas')
         .select('id, total, taxa_servico, data_fechamento, tipo, identificador, mesa_id, usuario_fechamento_id, unidade_id')
@@ -148,176 +224,333 @@ class DashboardModule {
       const { data: vendas, error } = await query;
       if (error) throw error;
 
-      this.vendasAtuais = vendas || []; // Salva para o modal
+      this.vendasAtuais = vendas || [];
 
+      // 2. Busca Pagamentos
+      let todosPagamentos = [];
+      if (this.vendasAtuais.length > 0) {
+        const vendasIds = this.vendasAtuais.map(v => v.id);
+        
+        for (let i = 0; i < vendasIds.length; i += 500) {
+          const chunk = vendasIds.slice(i, i + 500);
+          const { data: pags } = await db.getClient()
+             .from('pagamentos')
+             .select('venda_id, forma_pagamento_id, valor')
+             .in('venda_id', chunk);
+          if (pags) todosPagamentos.push(...pags);
+        }
+      }
+
+      const pagamentosAgrupados = todosPagamentos.reduce((acc, p) => {
+        if (!acc[p.venda_id]) acc[p.venda_id] = [];
+        acc[p.venda_id].push(p);
+        return acc;
+      }, {});
+
+      // 3. Estruturas para Métricas
       let faturamentoPeriodo = 0;
       let faturamentoHoje = 0;
       let qtdVendas = this.vendasAtuais.length;
+
+      // Classificação Dinâmica de Formas de Pagamento
+      this.metricasFormas = {
+        dinheiro: { icon: '💵', label: 'Dinheiro', hoje: 0, periodo: 0 },
+        pix: { icon: '💠', label: 'PIX', hoje: 0, periodo: 0 },
+        credito: { icon: '💳', label: 'Crédito', hoje: 0, periodo: 0 },
+        debito: { icon: '🏧', label: 'Débito', hoje: 0, periodo: 0 },
+        outros: { icon: '🪙', label: 'Outros', hoje: 0, periodo: 0 }
+      };
+
+      // Inicializa Mapa de Dias para o Gráfico (Para não ter buracos nas datas)
+      const chartMap = {};
+      let dAtual = new Date(this.filtros.dataInicio + 'T12:00:00');
+      const dFimDate = new Date(this.filtros.dataFim + 'T12:00:00');
       
-      const diasNoMes = dataFim.getDate();
-      const vendasPorDia = Array(diasNoMes).fill(0);
-      const labelsDias = Array.from({length: diasNoMes}, (_, i) => `${i + 1}/${mesStr}`);
+      while (dAtual <= dFimDate) {
+        const isoDia = dAtual.toISOString().split('T')[0];
+        const labelPT = dAtual.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' });
+        chartMap[isoDia] = { label: labelPT, totalVenda: 0, breakdownPagamentos: {} };
+        dAtual.setDate(dAtual.getDate() + 1);
+      }
 
+      // 4. Processa cada venda e distribui os valores
       this.vendasAtuais.forEach(v => {
-        const totalComTaxa = parseFloat(v.total) + parseFloat(v.taxa_servico || 0);
-        faturamentoPeriodo += totalComTaxa;
-
-        const dataFechamento = new Date(v.data_fechamento);
-        const diaVendaStr = dataFechamento.toISOString().split('T')[0]; 
+        v.pagamentos = pagamentosAgrupados[v.id] || [];
         
-        if (diaVendaStr === strHoje) faturamentoHoje += totalComTaxa;
+        const dataFechamento = new Date(v.data_fechamento);
+        const fusoVenda = dataFechamento.getTimezoneOffset() * 60000;
+        const diaVendaStr = new Date(dataFechamento.getTime() - fusoVenda).toISOString().split('T')[0];
+        
+        const isHoje = diaVendaStr === hojeStr;
 
-        const diaDoMes = dataFechamento.getDate();
-        vendasPorDia[diaDoMes - 1] += totalComTaxa;
+        // Se uma venda não tem pagamentos registados (migração antiga), consideramos o total dela
+        if (v.pagamentos.length === 0) {
+          const valor = parseFloat(v.total) + parseFloat(v.taxa_servico || 0);
+          faturamentoPeriodo += valor;
+          if (isHoje) faturamentoHoje += valor;
+          if (chartMap[diaVendaStr]) chartMap[diaVendaStr].totalVenda += valor;
+        }
+
+        // Soma baseada nos pagamentos reais recebidos (mais preciso)
+        v.pagamentos.forEach(pag => {
+          const valorPag = parseFloat(pag.valor);
+          const formaNome = this.formasMap[pag.forma_pagamento_id] || 'Outros';
+          const formaNomeLow = formaNome.toLowerCase();
+
+          // Global
+          faturamentoPeriodo += valorPag;
+          if (isHoje) faturamentoHoje += valorPag;
+
+          // Gráfico por dia
+          if (chartMap[diaVendaStr]) {
+             chartMap[diaVendaStr].totalVenda += valorPag;
+             if (!chartMap[diaVendaStr].breakdownPagamentos[formaNome]) {
+                 chartMap[diaVendaStr].breakdownPagamentos[formaNome] = 0;
+             }
+             chartMap[diaVendaStr].breakdownPagamentos[formaNome] += valorPag;
+          }
+
+          // Categoria Específica (Dinheiro, PIX, etc)
+          let cat = 'outros';
+          if (formaNomeLow.includes('dinheiro')) cat = 'dinheiro';
+          else if (formaNomeLow.includes('pix')) cat = 'pix';
+          else if (formaNomeLow.includes('crédito') || formaNomeLow.includes('credito')) cat = 'credito';
+          else if (formaNomeLow.includes('débito') || formaNomeLow.includes('debito')) cat = 'debito';
+
+          this.metricasFormas[cat].periodo += valorPag;
+          if (isHoje) this.metricasFormas[cat].hoje += valorPag;
+        });
       });
 
-      const ticketMedio = qtdVendas > 0 ? (faturamentoPeriodo / qtdVendas) : 0;
+      this.ticketMedio = qtdVendas > 0 ? (faturamentoPeriodo / qtdVendas) : 0;
+      this.faturamentoHoje = faturamentoHoje;
+      this.faturamentoPeriodo = faturamentoPeriodo;
+      this.qtdVendas = qtdVendas;
 
-      this.renderMetricas(faturamentoHoje, faturamentoPeriodo, ticketMedio, qtdVendas);
-      this.renderGrafico(labelsDias, vendasPorDia);
-      
-      // Se o modal estiver aberto, atualiza a tabela lá dentro
-      if (document.getElementById('modal-tabela-auditoria')) {
-        this.renderTabelaAuditoria();
-      }
+      // Prepara arrays finais para o Chart.js
+      this.labelsGrafico = Object.values(chartMap).map(d => d.label);
+      this.dadosGrafico = Object.values(chartMap).map(d => d.totalVenda);
+      this.dadosGraficoCompletos = Object.values(chartMap); // Guarda para o Tooltip
+
+      this.renderDynamicUI();
 
     } catch (error) {
       console.error('Erro ao processar dados do dashboard:', error);
     }
   }
 
-  renderMetricas(hoje, periodo, ticket, qtd) {
-    const container = document.getElementById('dashboard-metricas');
+  renderDynamicUI() {
+    const container = document.getElementById('dashboard-dynamic-content');
     if (!container) return;
-    container.innerHTML = `
-      <div class="dashboard-grid" style="margin-bottom: 1.5rem;">
-        <div class="stat-card success"><div class="stat-header"><span class="stat-title">Faturação Hoje</span><div class="stat-icon">💰</div></div><div class="stat-value">R$ ${hoje.toFixed(2)}</div><div class="stat-change" style="color: var(--text-muted);">Acumulado de hoje</div></div>
-        <div class="stat-card info"><div class="stat-header"><span class="stat-title">Faturação no Período</span><div class="stat-icon">📅</div></div><div class="stat-value">R$ ${periodo.toFixed(2)}</div><div class="stat-change" style="color: var(--text-muted);">${qtd} Venda(s) concluída(s)</div></div>
-        <div class="stat-card warning"><div class="stat-header"><span class="stat-title">Ticket Médio</span><div class="stat-icon">🧾</div></div><div class="stat-value">R$ ${ticket.toFixed(2)}</div><div class="stat-change" style="color: var(--text-muted);">Média de gasto por cliente</div></div>
+
+    if (this.telaAtual === 'resumo') {
+      container.innerHTML = this.htmlTelaResumo();
+      setTimeout(() => this.renderGrafico(), 50);
+    } else if (this.telaAtual === 'auditoria') {
+      container.innerHTML = this.htmlTelaAuditoria();
+    }
+  }
+
+  htmlTelaResumo() {
+    // 1. Linha principal (Totais)
+    let html = `
+      <div class="dashboard-grid animate-fade-in" style="margin-bottom: 1.5rem;">
+        <div class="stat-card success"><div class="stat-header"><span class="stat-title">Faturação Hoje</span><div class="stat-icon">💰</div></div><div class="stat-value">R$ ${this.faturamentoHoje.toFixed(2)}</div><div class="stat-change" style="color: var(--text-muted);">Acumulado de hoje</div></div>
+        <div class="stat-card info"><div class="stat-header"><span class="stat-title">Faturação no Período</span><div class="stat-icon">📅</div></div><div class="stat-value">R$ ${this.faturamentoPeriodo.toFixed(2)}</div><div class="stat-change" style="color: var(--text-muted);">${this.qtdVendas} Vendas</div></div>
+        <div class="stat-card warning"><div class="stat-header"><span class="stat-title">Ticket Médio</span><div class="stat-icon">🧾</div></div><div class="stat-value">R$ ${this.ticketMedio.toFixed(2)}</div><div class="stat-change" style="color: var(--text-muted);">Por cliente no período</div></div>
       </div>
     `;
-  }
 
-  renderGrafico(labels, dados) {
-    const ctx = document.getElementById('faturamentoChart');
-    if (!ctx) return;
-    if (this.chartInstance) this.chartInstance.destroy();
-    const primaryColor = getComputedStyle(document.documentElement).getPropertyValue('--primary').trim() || '#E8913A';
-    this.chartInstance = new Chart(ctx, {
-      type: 'line',
-      data: {
-        labels: labels,
-        datasets: [{
-          label: 'Faturação (R$)', data: dados, backgroundColor: 'rgba(232, 145, 58, 0.2)', borderColor: primaryColor,
-          borderWidth: 3, pointBackgroundColor: primaryColor, fill: true, tension: 0.3
-        }]
-      },
-      options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } } }
+    // 2. Linha das Formas de Pagamento
+    html += `
+      <h4 style="margin: 2rem 0 1rem 0; color: var(--text-secondary); text-transform: uppercase; font-size: 0.85rem; letter-spacing: 0.5px;">Detalhamento por Meio de Pagamento</h4>
+      <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem; margin-bottom: 2rem;">
+    `;
+
+    Object.values(this.metricasFormas).forEach(m => {
+      // Só mostra se houver movimentação para não poluir
+      if (m.periodo > 0 || m.hoje > 0) {
+        html += `
+          <div class="card animate-fade-in" style="padding: 1rem; border-left: 3px solid var(--border-color);">
+            <div style="display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.5rem; font-weight: 700; color: var(--text-primary);">
+              <span style="font-size: 1.2rem;">${m.icon}</span> ${m.label}
+            </div>
+            <div style="display: flex; justify-content: space-between; font-size: 0.85rem; color: var(--text-secondary); border-bottom: 1px dashed var(--border-color); padding-bottom: 0.25rem;">
+              <span>Hoje:</span> <strong style="color: var(--success);">R$ ${m.hoje.toFixed(2)}</strong>
+            </div>
+            <div style="display: flex; justify-content: space-between; font-size: 0.85rem; margin-top: 0.25rem;">
+              <span>Período:</span> <strong>R$ ${m.periodo.toFixed(2)}</strong>
+            </div>
+          </div>
+        `;
+      }
     });
+
+    html += `</div>`;
+
+    // 3. Gráfico Evolutivo
+    html += `
+      <div class="card animate-fade-in" style="margin-bottom: 1.5rem; position: relative; height: 350px;">
+        <canvas id="faturamentoChart"></canvas>
+      </div>
+    `;
+
+    return html;
   }
 
-  // ==========================================
-  // MODAL DE AUDITORIA (NOVO)
-  // ==========================================
-  abrirModalAuditoria() {
-    const content = `
+  htmlTelaAuditoria() {
+    let linhasHtml = '';
+
+    if (this.vendasAtuais.length === 0) {
+      linhasHtml = `<tr><td colspan="7" class="text-center" style="padding: 3rem; color: var(--text-muted);">Nenhuma venda concluída neste período.</td></tr>`;
+    } else {
+      this.vendasAtuais.forEach(v => {
+        const dataFormatada = new Date(v.data_fechamento).toLocaleString('pt-PT', {day:'2-digit', month:'2-digit', hour:'2-digit', minute:'2-digit'});
+        const nomeCaixa = this.usuariosMap[v.usuario_fechamento_id] || 'Desconhecido';
+        const nomeUnidade = this.unidades.find(u => u.id === v.unidade_id)?.nome || '---';
+        const nomeMesa = this.mesasMap[v.mesa_id] || v.identificador || 'Desconhecida';
+        
+        const origemBadge = v.tipo === 'balcao' 
+          ? `<span style="background: var(--bg-secondary); padding: 2px 6px; border-radius: 4px; font-weight: 600; font-size: 0.8rem;">🛒 Balcão</span>` 
+          : `<span style="font-size: 0.85rem; font-weight: 600;">🍽️ ${nomeMesa}</span>`;
+
+        // Renderiza com Ícones Inteligentes
+        const detalhePagamentos = v.pagamentos.length > 0 
+          ? v.pagamentos.map(p => {
+              const formaNome = this.formasMap[p.forma_pagamento_id] || 'Outros';
+              const icone = this.getIconePagamento(formaNome);
+              return `<div style="white-space: nowrap;"><span style="font-size: 0.9rem;">${icone}</span> <span style="color: var(--text-secondary); font-size: 0.75rem;">${formaNome}:</span> <strong style="color: var(--text-primary); font-size: 0.85rem;">R$ ${parseFloat(p.valor).toFixed(2)}</strong></div>`;
+            }).join('')
+          : `<span style="color: var(--text-muted); font-size: 0.8rem;">---</span>`;
+
+        const total = parseFloat(v.total);
+        const taxa = parseFloat(v.taxa_servico || 0);
+
+        linhasHtml += `
+          <tr>
+            <td style="color: var(--text-muted); font-size: 0.85rem;">${dataFormatada}</td>
+            ${this.filtros.unidadeId === 'todas' ? `<td><strong>${nomeUnidade}</strong></td>` : ''}
+            <td>${origemBadge}</td>
+            <td style="font-size: 0.85rem;">${nomeCaixa}</td>
+            <td>${detalhePagamentos}</td>
+            <td style="text-align: right; color: var(--text-secondary); font-size: 0.85rem;">R$ ${total.toFixed(2)}<br><small>+ Taxa R$ ${taxa.toFixed(2)}</small></td>
+            <td style="text-align: right; font-weight: 800; color: var(--primary); font-size: 1rem;">R$ ${(total + taxa).toFixed(2)}</td>
+          </tr>
+        `;
+      });
+    }
+
+    return `
       <style>
-        .modal-auditoria { width: 95vw !important; max-width: 1000px !important; }
-        .table-auditoria { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
-        .table-auditoria th, .table-auditoria td { padding: 0.75rem 1rem; text-align: left; border-bottom: 1px solid var(--border-color); }
+        .table-auditoria { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
+        .table-auditoria th, .table-auditoria td { padding: 1rem; text-align: left; border-bottom: 1px solid var(--border-color); }
         .table-auditoria th { background: var(--bg-secondary); position: sticky; top: 0; font-weight: 700; color: var(--text-secondary); text-transform: uppercase; font-size: 0.75rem; z-index: 10;}
         .table-auditoria tbody tr:hover { background: var(--bg-hover); }
       </style>
-      
-      <div class="card-header" style="padding-bottom: 1rem; border-bottom: none;">
-        <h3 class="card-title">🧾 Histórico de Vendas (${this.filtros.mesAno})</h3>
-        <button class="btn btn-ghost btn-sm" onclick="modal.close()">✕</button>
-      </div>
-      
-      <!-- Navegação de Unidades DENTRO do Modal -->
-      <div id="modal-filtros-auditoria" style="padding: 0 1.5rem 1rem 1.5rem; display: flex; gap: 0.5rem; flex-wrap: wrap; border-bottom: 1px solid var(--border-color); background: var(--bg-primary);">
-      </div>
 
-      <!-- Tabela -->
-      <div id="modal-tabela-auditoria" style="max-height: 60vh; overflow-y: auto;" class="custom-scrollbar">
-        <div class="text-center" style="padding: 3rem;"><div class="spinner"></div></div>
+      <div class="card animate-fade-in" style="margin-bottom: 2.5rem; padding: 0; overflow: hidden; border: 1px solid var(--primary-light);">
+        <div class="card-header" style="background: rgba(232, 145, 58, 0.05); border-bottom: 1px solid var(--border-color); margin: 0; padding: 1.5rem;">
+          <h3 class="card-title">🧾 Relatório Detalhado de Vendas</h3>
+          <button class="btn btn-primary btn-sm" onclick="dashboardModule.mudarTela('resumo')">
+            ← Voltar ao Gráfico
+          </button>
+        </div>
+        
+        <!-- A tabela vai expandir naturalmente sem barra interna dupla -->
+        <div style="width: 100%; overflow-x: auto;">
+          <table class="table-auditoria">
+            <thead>
+              <tr>
+                <th>Data / Hora</th>
+                ${this.filtros.unidadeId === 'todas' ? '<th>Unidade</th>' : ''}
+                <th>Origem</th>
+                <th>Operador de Caixa</th>
+                <th>Detalhes do Pagamento</th>
+                <th style="text-align: right;">Valores</th>
+                <th style="text-align: right;">Total Recebido</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${linhasHtml}
+            </tbody>
+          </table>
+        </div>
       </div>
     `;
-    
-    modal.open(content);
-    document.querySelector('.modal-content').classList.add('modal-auditoria');
-    
-    this.renderBotoesModal();
-    this.renderTabelaAuditoria();
   }
 
-  renderBotoesModal() {
-    const container = document.getElementById('modal-filtros-auditoria');
-    if (!container) return;
+  renderGrafico() {
+    const ctx = document.getElementById('faturamentoChart');
+    if (!ctx) return;
+    if (this.chartInstance) this.chartInstance.destroy();
+    
+    const isDarkMode = document.documentElement.getAttribute('data-theme') === 'dark';
+    const textColor = isDarkMode ? '#B0B0B0' : '#666666';
+    const gridColor = isDarkMode ? '#404040' : '#E0E0E0';
+    const primaryColor = getComputedStyle(document.documentElement).getPropertyValue('--primary').trim() || '#E8913A';
+    
+    // Referência para usar dentro do Tooltip
+    const dadosCompletosDia = this.dadosGraficoCompletos;
+    const moduloRef = this;
 
-    let html = `<button class="btn btn-sm ${this.filtros.unidadeId === 'todas' ? 'btn-primary' : 'btn-secondary border'}" style="border-radius: 20px;" onclick="dashboardModule.mudarUnidadeFiltro('todas')">🏢 Todas</button>`;
-    this.unidades.forEach(u => {
-      const isAtivo = this.filtros.unidadeId === u.id;
-      html += `<button class="btn btn-sm ${isAtivo ? 'btn-primary' : 'btn-secondary border'}" style="border-radius: 20px;" onclick="dashboardModule.mudarUnidadeFiltro('${u.id}')">🏪 ${u.nome}</button>`;
+    this.chartInstance = new Chart(ctx, {
+      type: 'line',
+      data: {
+        labels: this.labelsGrafico,
+        datasets: [{
+          label: 'Faturação Total', 
+          data: this.dadosGrafico, 
+          backgroundColor: 'rgba(232, 145, 58, 0.2)', 
+          borderColor: primaryColor,
+          borderWidth: 3, 
+          pointBackgroundColor: primaryColor, 
+          pointBorderColor: '#fff',
+          pointRadius: 4,
+          pointHoverRadius: 6,
+          fill: true, 
+          tension: 0.3
+        }]
+      },
+      options: { 
+        responsive: true, 
+        maintainAspectRatio: false, 
+        plugins: { 
+          legend: { display: false },
+          tooltip: {
+            padding: 12,
+            titleFont: { size: 14 },
+            bodyFont: { size: 13 },
+            callbacks: {
+              label: function(context) {
+                const diaInfo = dadosCompletosDia[context.dataIndex];
+                let linhas = [`💰 Faturamento: R$ ${context.parsed.y.toFixed(2)}`];
+                
+                // Adiciona o breakdown se existirem pagamentos neste dia
+                const pagamentos = diaInfo.breakdownPagamentos;
+                if (Object.keys(pagamentos).length > 0) {
+                  linhas.push('-------------------------');
+                  for (const [forma, valor] of Object.entries(pagamentos)) {
+                    if (valor > 0) {
+                      const icone = moduloRef.getIconePagamento(forma);
+                      linhas.push(`${icone} ${forma}: R$ ${valor.toFixed(2)}`);
+                    }
+                  }
+                } else if (context.parsed.y > 0) {
+                  linhas.push('-------------------------');
+                  linhas.push('⚠️ Vendas sem detalhe de pagt.');
+                }
+                return linhas;
+              }
+            }
+          }
+        },
+        scales: {
+          y: { beginAtZero: true, ticks: { color: textColor }, grid: { color: gridColor, drawBorder: false } },
+          x: { ticks: { color: textColor }, grid: { display: false } }
+        },
+        interaction: { intersect: false, mode: 'index' }
+      }
     });
-    container.innerHTML = html;
-  }
-
-  renderTabelaAuditoria() {
-    const container = document.getElementById('modal-tabela-auditoria');
-    if (!container) return;
-
-    if (this.vendasAtuais.length === 0) {
-      container.innerHTML = `<div class="empty-state" style="padding: 3rem;"><p>Nenhuma venda concluída neste período.</p></div>`;
-      return;
-    }
-
-    let html = `
-      <table class="table-auditoria">
-        <thead>
-          <tr>
-            <th>Data e Hora (Fecho)</th>
-            ${this.filtros.unidadeId === 'todas' ? '<th>Unidade</th>' : ''}
-            <th>Origem</th>
-            <th>Atendente / Caixa</th>
-            <th style="text-align: right;">Subtotal</th>
-            <th style="text-align: right;">Taxa</th>
-            <th style="text-align: right;">Total Final</th>
-          </tr>
-        </thead>
-        <tbody>
-    `;
-
-    this.vendasAtuais.forEach(v => {
-      const dataFormatada = new Date(v.data_fechamento).toLocaleString('pt-PT');
-      const nomeCaixa = this.usuariosMap[v.usuario_fechamento_id] || 'Desconhecido';
-      const nomeUnidade = this.unidades.find(u => u.id === v.unidade_id)?.nome || '---';
-      
-      // Traduz o ID da Mesa para o Nome Real
-      const nomeMesa = this.mesasMap[v.mesa_id] || v.identificador || 'Desconhecida';
-      
-      const origemBadge = v.tipo === 'balcao' 
-        ? `<span style="background: var(--bg-secondary); padding: 2px 6px; border-radius: 4px; font-weight: 600;">🛒 Balcão</span>` 
-        : `🍽️ ${nomeMesa}`;
-
-      const total = parseFloat(v.total);
-      const taxa = parseFloat(v.taxa_servico || 0);
-
-      html += `
-        <tr>
-          <td style="color: var(--text-muted);">${dataFormatada}</td>
-          ${this.filtros.unidadeId === 'todas' ? `<td><strong>${nomeUnidade}</strong></td>` : ''}
-          <td>${origemBadge}</td>
-          <td>${nomeCaixa}</td>
-          <td style="text-align: right;">R$ ${total.toFixed(2)}</td>
-          <td style="text-align: right; color: var(--text-muted);">R$ ${taxa.toFixed(2)}</td>
-          <td style="text-align: right; font-weight: 800; color: var(--primary);">R$ ${(total + taxa).toFixed(2)}</td>
-        </tr>
-      `;
-    });
-
-    html += `</tbody></table>`;
-    container.innerHTML = html;
   }
 }
 
