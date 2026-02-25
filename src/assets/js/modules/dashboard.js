@@ -104,7 +104,7 @@ class DashboardModule {
       content.innerHTML = `
         <div class="card animate-fade-in" style="padding: 0; overflow: hidden; border: 1px solid var(--border-color);">
           <div class="card-header" style="background: var(--bg-secondary); border-bottom: 1px solid var(--border-color); margin: 0; padding: 1.5rem;">
-            <h3 class="card-title" style="margin: 0;">📦 Controlo Diário de Stock e Descartes</h3>
+            <h3 class="card-title" style="margin: 0;">📦 Controle Diário de Stock e Descartes</h3>
           </div>
           <div id="estoque-list" class="injected-tab"></div>
         </div>
@@ -125,7 +125,7 @@ class DashboardModule {
       content.innerHTML = `
         <div class="card animate-fade-in" style="padding: 0; overflow: hidden; border: 1px solid var(--border-color);">
           <div class="card-header" style="background: var(--bg-secondary); border-bottom: 1px solid var(--border-color); margin: 0; padding: 1.5rem; justify-content: space-between; display: flex; align-items: center;">
-            <h3 class="card-title" style="margin: 0;">👥 Controlo de Acessos e Utilizadores</h3>
+            <h3 class="card-title" style="margin: 0;">👥 Controle de Acessos e Utilizadores</h3>
             <button class="btn btn-primary" onclick="window.usuariosModule.openModal()">+ Novo Utilizador</button>
           </div>
           <div id="usuarios-list" class="injected-tab"></div>
@@ -155,9 +155,9 @@ class DashboardModule {
         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; flex-wrap: wrap; gap: 1rem;">
           <div style="display: flex; gap: 0.5rem; background: var(--bg-secondary); padding: 0.5rem; border-radius: var(--border-radius-lg); border: 1px solid var(--border-color); overflow-x: auto; max-width: 100%;">
             <button id="tab-resumo" class="btn ${this.telaAtual === 'resumo' ? 'btn-primary' : 'btn-ghost'}" style="border-radius: var(--border-radius); padding: 0.5rem 1rem; white-space: nowrap;" onclick="dashboardModule.mudarTela('resumo')">📊 Resumo Gráfico</button>
-            <button id="tab-equipe" class="btn ${this.telaAtual === 'equipe' ? 'btn-primary' : 'btn-ghost'}" style="border-radius: var(--border-radius); padding: 0.5rem 1rem; white-space: nowrap;" onclick="dashboardModule.mudarTela('equipe')">👥 Desempenho Equipa</button>
+            <button id="tab-equipe" class="btn ${this.telaAtual === 'equipe' ? 'btn-primary' : 'btn-ghost'}" style="border-radius: var(--border-radius); padding: 0.5rem 1rem; white-space: nowrap;" onclick="dashboardModule.mudarTela('equipe')">👥 Desempenho Equipe</button>
             <button id="tab-auditoria" class="btn ${this.telaAtual === 'auditoria' ? 'btn-primary' : 'btn-ghost'}" style="border-radius: var(--border-radius); padding: 0.5rem 1rem; white-space: nowrap;" onclick="dashboardModule.mudarTela('auditoria')">🧾 Vendas (Itens)</button>
-            <button id="tab-turnos" class="btn ${this.telaAtual === 'turnos' ? 'btn-primary' : 'btn-ghost'}" style="border-radius: var(--border-radius); padding: 0.5rem 1rem; white-space: nowrap;" onclick="dashboardModule.mudarTela('turnos')">🔒 Fechos de Caixa</button>
+            <button id="tab-turnos" class="btn ${this.telaAtual === 'turnos' ? 'btn-primary' : 'btn-ghost'}" style="border-radius: var(--border-radius); padding: 0.5rem 1rem; white-space: nowrap;" onclick="dashboardModule.mudarTela('turnos')">🔒 Fechamento de Caixa</button>
           </div>
         </div>
 
