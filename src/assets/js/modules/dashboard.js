@@ -766,9 +766,6 @@ class DashboardModule {
     const turno = this.turnosAtuais.find(t => t.id === turnoId);
     if (!turno) return;
 
-    let printDiv = document.getElementById('print-section');
-    if (!printDiv) { printDiv = document.createElement('div'); printDiv.id = 'print-section'; document.body.appendChild(printDiv); }
-    
     const nomeUnidade = this.unidades.find(u => u.id === turno.unidade_id)?.nome || 'Unidade';
     const inicio = new Date(turno.data_abertura).toLocaleString('pt-BR');
     const fim = new Date(turno.data_fechamento).toLocaleString('pt-BR');
@@ -782,49 +779,58 @@ class DashboardModule {
     const html = `
       <div class="ticket-header">
         <div class="ticket-title">*** RELATÓRIO Z (VIA ADMIN) ***</div>
-        <div class="ticket-info">FECHO DE CAIXA</div>
+        <div class="ticket-info" style="font-weight: 900;">FECHO DE CAIXA</div>
         <div class="ticket-divider"></div>
         <div class="ticket-info" style="text-align: left;">
-          LOJA: ${nomeUnidade}<br>
-          ABERTURA: ${inicio}<br>
-          FECHO: ${fim}<br>
-          OP. ABERTURA: ${operadorAbertura}<br>
-          OP. FECHO: ${operadorFecho}<br>
+          <strong>LOJA:</strong> ${nomeUnidade}<br>
+          <strong>ABERTURA:</strong> ${inicio}<br>
+          <strong>FECHO:</strong> ${fim}<br>
+          <strong>OP. ABERTURA:</strong> ${operadorAbertura}<br>
+          <strong>OP. FECHO:</strong> ${operadorFecho}<br>
         </div>
         <div class="ticket-divider"></div>
       </div>
-      
-      <div style="font-weight: bold; margin-bottom: 5px; text-align: center;">RESUMO FINANCEIRO</div>
+
+      <div class="ticket-section-title">RESUMO FINANCEIRO</div>
       <table class="ticket-totals">
         <tr><td>FUNDO DE CAIXA (TROCO):</td><td>R$ ${parseFloat(turno.fundo_caixa).toFixed(2)}</td></tr>
         <tr><td colspan="2"><div class="ticket-divider"></div></td></tr>
-        
-        <tr><td colspan="2" style="font-weight: bold; padding-top: 5px;">RECEBIMENTOS DO TURNO:</td></tr>
+
+        <tr><td colspan="2" style="font-weight: 900; padding-top: 5px;">RECEBIMENTOS DO TURNO:</td></tr>
         ${formasHtml}
-        
+
         <tr><td colspan="2"><div class="ticket-divider"></div></td></tr>
         <tr><td class="bold">TOTAL FATURADO (LIQUIDO):</td><td class="bold">R$ ${parseFloat(turno.total_vendas).toFixed(2)}</td></tr>
       </table>
 
       <div class="ticket-divider"></div>
-      <div style="font-weight: bold; margin-bottom: 5px; text-align: center;">AUDITORIA DE GAVETA</div>
+      <div class="ticket-section-title">AUDITORIA DE GAVETA</div>
       <table class="ticket-totals">
         <tr><td>DINHEIRO ESPERADO (FUNDO + VENDAS):</td><td>R$ ${parseFloat(turno.total_dinheiro_sistema).toFixed(2)}</td></tr>
         <tr><td>DINHEIRO DECLARADO PELO CAIXA:</td><td>R$ ${parseFloat(turno.total_dinheiro_informado).toFixed(2)}</td></tr>
         <tr><td colspan="2"><div class="ticket-divider"></div></td></tr>
         <tr>
           <td class="bold">DIFERENÇA (QUEBRA/SOBRA):</td>
-          <td class="bold" style="color: ${turno.diferenca_caixa < 0 ? 'red' : 'black'};">R$ ${parseFloat(turno.diferenca_caixa).toFixed(2)}</td>
+          <td class="bold">R$ ${parseFloat(turno.diferenca_caixa).toFixed(2)}</td>
         </tr>
       </table>
-      
+
       <div class="ticket-divider"></div>
       <div class="ticket-footer">
         <div>Relatório reimpresso via Painel Administrativo.</div>
       </div>
     `;
-    printDiv.innerHTML = html;
-    setTimeout(() => window.print(), 200);
+
+    // Usa o mesmo sistema de impressão silenciosa do caixaModule
+    if (typeof caixaModule !== 'undefined' && caixaModule._imprimirSilencioso) {
+      caixaModule._imprimirSilencioso(html);
+    } else {
+      // Fallback direto
+      let printDiv = document.getElementById('print-section');
+      if (!printDiv) { printDiv = document.createElement('div'); printDiv.id = 'print-section'; document.body.appendChild(printDiv); }
+      printDiv.innerHTML = html;
+      setTimeout(() => window.print(), 200);
+    }
   }
 
   renderGrafico() {

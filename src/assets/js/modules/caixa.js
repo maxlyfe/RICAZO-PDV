@@ -939,12 +939,103 @@ class CaixaModule {
   }
 
   // ==========================================
-  // FUNÇÕES DE IMPRESSÃO
+  // FUNÇÕES DE IMPRESSÃO (Silenciosa via iframe)
   // ==========================================
-  imprimirTicket(venda, pagamentos, trocoTotal, subtotal, taxaValor, taxaPercent, isReimpressao = false) {
+
+  /**
+   * Imprime silenciosamente via iframe oculto.
+   * Evita o diálogo do Chrome — sai direto na impressora padrão.
+   * Fallback: se o iframe falhar, usa window.print() normalmente.
+   */
+  _imprimirSilencioso(conteudoHtml) {
+    const estiloTicket = `
+      @page { size: 80mm auto; margin: 0; }
+      * { margin: 0; padding: 0; box-sizing: border-box; }
+      body {
+        width: 72mm;
+        padding: 2mm 4mm;
+        font-family: 'Arial', 'Helvetica', sans-serif;
+        font-size: 13px;
+        font-weight: 600;
+        line-height: 1.4;
+        color: #000;
+        background: #fff;
+      }
+      .ticket-header { text-align: center; margin-bottom: 8px; }
+      .ticket-title { font-size: 22px; font-weight: 900; margin-bottom: 4px; text-transform: uppercase; letter-spacing: 1px; }
+      .ticket-info { font-size: 13px; font-weight: 600; line-height: 1.5; }
+      .ticket-info strong { font-weight: 900; }
+      .ticket-divider { border-top: 2px dashed #000; margin: 6px 0; }
+      .ticket-table { width: 100%; border-collapse: collapse; font-size: 13px; font-weight: 700; }
+      .ticket-table th { border-bottom: 2px solid #000; padding-bottom: 4px; font-size: 13px; font-weight: 900; text-transform: uppercase; }
+      .ticket-table th, .ticket-table td { text-align: left; vertical-align: top; padding: 4px 0; }
+      .ticket-table th:last-child, .ticket-table td:last-child { text-align: right; }
+      .ticket-table td:first-child { width: 30px; text-align: center; font-weight: 800; }
+      .ticket-table td:nth-child(2) { font-weight: 700; padding-right: 6px; }
+      .ticket-table td:last-child { font-weight: 800; white-space: nowrap; }
+      .ticket-totals { width: 100%; margin-top: 6px; font-size: 13px; font-weight: 700; }
+      .ticket-totals td { padding: 3px 0; font-weight: 700; }
+      .ticket-totals td:last-child { text-align: right; font-weight: 800; }
+      .ticket-totals .bold { font-weight: 900; font-size: 16px; }
+      .ticket-section-title { font-weight: 900; text-align: center; margin: 6px 0; font-size: 14px; }
+      .ticket-footer { text-align: center; margin-top: 12px; font-size: 13px; font-weight: 700; margin-bottom: 15px; }
+    `;
+
+    // Tenta impressão silenciosa via iframe
+    try {
+      let iframe = document.getElementById('ricazo-print-frame');
+      if (iframe) iframe.remove();
+
+      iframe = document.createElement('iframe');
+      iframe.id = 'ricazo-print-frame';
+      iframe.style.cssText = 'position:fixed;left:-9999px;top:-9999px;width:80mm;height:0;border:none;visibility:hidden;';
+      document.body.appendChild(iframe);
+
+      const doc = iframe.contentDocument || iframe.contentWindow.document;
+      doc.open();
+      doc.write(`<!DOCTYPE html><html><head><style>${estiloTicket}</style></head><body>${conteudoHtml}</body></html>`);
+      doc.close();
+
+      iframe.onload = () => {
+        try {
+          iframe.contentWindow.focus();
+          iframe.contentWindow.print();
+        } catch (e) {
+          // Fallback: imprime pela janela principal
+          this._imprimirFallback(conteudoHtml);
+        }
+        // Limpa o iframe após impressão
+        setTimeout(() => { if (iframe.parentNode) iframe.remove(); }, 3000);
+      };
+
+      // Se o iframe já carregou (sync), dispara agora
+      if (doc.readyState === 'complete') {
+        setTimeout(() => {
+          try {
+            iframe.contentWindow.focus();
+            iframe.contentWindow.print();
+          } catch (e) {
+            this._imprimirFallback(conteudoHtml);
+          }
+          setTimeout(() => { if (iframe.parentNode) iframe.remove(); }, 3000);
+        }, 100);
+      }
+
+    } catch (e) {
+      console.warn('Impressão via iframe falhou, usando fallback:', e);
+      this._imprimirFallback(conteudoHtml);
+    }
+  }
+
+  /** Fallback: usa print-section + window.print() */
+  _imprimirFallback(conteudoHtml) {
     let printDiv = document.getElementById('print-section');
     if (!printDiv) { printDiv = document.createElement('div'); printDiv.id = 'print-section'; document.body.appendChild(printDiv); }
-    
+    printDiv.innerHTML = conteudoHtml;
+    setTimeout(() => window.print(), 150);
+  }
+
+  imprimirTicket(venda, pagamentos, trocoTotal, subtotal, taxaValor, taxaPercent, isReimpressao = false) {
     const unidade = auth.getUnidadeAtual();
     const dataHora = venda.data_fechamento ? new Date(venda.data_fechamento).toLocaleString('pt-BR') : new Date().toLocaleString('pt-BR');
     const atendente = auth.getCurrentUser()?.nome || 'Operador';
@@ -958,35 +1049,35 @@ class CaixaModule {
         <div class="ticket-info">${unidade.nome}</div>
         <div class="ticket-info">${unidade.endereco || ''}</div>
         <div class="ticket-divider"></div>
-        <div class="ticket-info">DATA: ${dataHora}</div>
-        <div class="ticket-info">CAIXA: ${atendente}</div>
-        <div class="ticket-info">PEDIDO: #${venda.id.substring(0,8).toUpperCase()} - <strong>${identificador}</strong></div>
+        <div class="ticket-info"><strong>DATA:</strong> ${dataHora}</div>
+        <div class="ticket-info"><strong>CAIXA:</strong> ${atendente}</div>
+        <div class="ticket-info"><strong>PEDIDO:</strong> #${venda.id.substring(0,8).toUpperCase()} — <strong>${identificador}</strong></div>
         <div class="ticket-divider"></div>
       </div>
       <table class="ticket-table">
         <thead><tr><th>QTD</th><th>PRODUTO</th><th>TOTAL</th></tr></thead>
-        <tbody>${venda.itens.map(i => `<tr><td>${i.quantidade}</td><td>${i.produto?.nome}</td><td>R$ ${parseFloat(i.subtotal).toFixed(2)}</td></tr>`).join('')}</tbody>
+        <tbody>${venda.itens.map(i => `<tr><td>${i.quantidade}</td><td>${i.produto?.nome || '—'}</td><td>R$ ${parseFloat(i.subtotal).toFixed(2)}</td></tr>`).join('')}</tbody>
       </table>
       <div class="ticket-divider"></div>
       <table class="ticket-totals">
         <tr><td>SUBTOTAL:</td><td>R$ ${subtotal.toFixed(2)}</td></tr>
         ${taxaValor > 0 ? `<tr><td>TAXA SERVIÇO (${taxaPercent}%):</td><td>R$ ${taxaValor.toFixed(2)}</td></tr>` : ''}
         <tr><td class="bold">TOTAL A PAGAR:</td><td class="bold">R$ ${(subtotal + taxaValor).toFixed(2)}</td></tr>
-        <tr><td colspan="2"><div style="height:5px;"></div></td></tr>
+        <tr><td colspan="2" style="height:6px;"></td></tr>
         ${pagamentos.map(p => `<tr><td>${p.forma_nome.toUpperCase()}:</td><td>R$ ${p.valor.toFixed(2)}</td></tr>`).join('')}
-        <tr><td>TROCO:</td><td class="bold">R$ ${trocoTotal.toFixed(2)}</td></tr>
+        <tr><td class="bold">TROCO:</td><td class="bold">R$ ${trocoTotal.toFixed(2)}</td></tr>
       </table>
       <div class="ticket-divider"></div>
-      <div class="ticket-footer"><div style="font-weight: bold; margin-bottom: 5px;">OBRIGADO PELA PREFERÊNCIA!</div></div>
+      <div class="ticket-footer">
+        <div style="font-weight: 900; margin-bottom: 4px;">OBRIGADO PELA PREFERÊNCIA!</div>
+        <div style="font-size: 11px; font-weight: 600;">${new Date().getFullYear()} — ${CONFIG.APP_NAME || 'RicaZo'}</div>
+      </div>
     `;
-    printDiv.innerHTML = html;
-    setTimeout(() => window.print(), 150);
+
+    this._imprimirSilencioso(html);
   }
 
   imprimirRelatorioZ(turno, totalTaxasRecolhidas) {
-    let printDiv = document.getElementById('print-section');
-    if (!printDiv) { printDiv = document.createElement('div'); printDiv.id = 'print-section'; document.body.appendChild(printDiv); }
-    
     const unidade = auth.getUnidadeAtual();
     const inicio = new Date(turno.data_abertura).toLocaleString('pt-BR');
     const fim = new Date(turno.data_fechamento).toLocaleString('pt-BR');
@@ -1000,52 +1091,52 @@ class CaixaModule {
     const html = `
       <div class="ticket-header">
         <div class="ticket-title">*** RELATÓRIO Z ***</div>
-        <div class="ticket-info">FECHO DE CAIXA</div>
+        <div class="ticket-info" style="font-weight: 900;">FECHO DE CAIXA</div>
         <div class="ticket-divider"></div>
         <div class="ticket-info" style="text-align: left;">
-          LOJA: ${unidade.nome}<br>
-          ABERTURA: ${inicio}<br>
-          FECHO: ${fim}<br>
-          OP. ABERTURA: ${operadorAbertura}<br>
-          OP. FECHO: ${operadorFecho}<br>
+          <strong>LOJA:</strong> ${unidade.nome}<br>
+          <strong>ABERTURA:</strong> ${inicio}<br>
+          <strong>FECHO:</strong> ${fim}<br>
+          <strong>OP. ABERTURA:</strong> ${operadorAbertura}<br>
+          <strong>OP. FECHO:</strong> ${operadorFecho}<br>
         </div>
         <div class="ticket-divider"></div>
       </div>
-      
-      <div style="font-weight: bold; margin-bottom: 5px; text-align: center;">RESUMO FINANCEIRO</div>
+
+      <div class="ticket-section-title">RESUMO FINANCEIRO</div>
       <table class="ticket-totals">
         <tr><td>FUNDO DE CAIXA (TROCO):</td><td>R$ ${parseFloat(turno.fundo_caixa).toFixed(2)}</td></tr>
         <tr><td colspan="2"><div class="ticket-divider"></div></td></tr>
-        
-        <tr><td colspan="2" style="font-weight: bold; padding-top: 5px;">RECEBIMENTOS DO TURNO:</td></tr>
+
+        <tr><td colspan="2" style="font-weight: 900; padding-top: 5px;">RECEBIMENTOS DO TURNO:</td></tr>
         ${formasHtml}
-        
+
         <tr><td colspan="2"><div class="ticket-divider"></div></td></tr>
         <tr><td class="bold">TOTAL PRODUTOS (CASA):</td><td class="bold">R$ ${(parseFloat(turno.total_vendas) - totalTaxasRecolhidas).toFixed(2)}</td></tr>
         <tr><td class="bold">TOTAL TAXAS SERVIÇO:</td><td class="bold">R$ ${parseFloat(totalTaxasRecolhidas).toFixed(2)}</td></tr>
-        <tr><td colspan="2"><div style="height:5px;"></div></td></tr>
+        <tr><td colspan="2" style="height:6px;"></td></tr>
         <tr><td class="bold">TOTAL GERAL RECEBIDO:</td><td class="bold">R$ ${parseFloat(turno.total_vendas).toFixed(2)}</td></tr>
       </table>
 
       <div class="ticket-divider"></div>
-      <div style="font-weight: bold; margin-bottom: 5px; text-align: center;">AUDITORIA DE GAVETA</div>
+      <div class="ticket-section-title">AUDITORIA DE GAVETA</div>
       <table class="ticket-totals">
         <tr><td>DINHEIRO ESPERADO (FUNDO + VENDAS):</td><td>R$ ${parseFloat(turno.total_dinheiro_sistema).toFixed(2)}</td></tr>
         <tr><td>DINHEIRO DECLARADO PELO CAIXA:</td><td>R$ ${parseFloat(turno.total_dinheiro_informado).toFixed(2)}</td></tr>
         <tr><td colspan="2"><div class="ticket-divider"></div></td></tr>
         <tr>
           <td class="bold">DIFERENÇA (QUEBRA/SOBRA):</td>
-          <td class="bold" style="color: ${turno.diferenca_caixa < 0 ? 'red' : 'black'};">R$ ${parseFloat(turno.diferenca_caixa).toFixed(2)}</td>
+          <td class="bold">R$ ${parseFloat(turno.diferenca_caixa).toFixed(2)}</td>
         </tr>
       </table>
-      
+
       <div class="ticket-divider"></div>
       <div class="ticket-footer">
-        <div>Relatório gerado automaticamente pelo sistema RicaZo.</div>
+        <div>Relatório gerado pelo sistema ${CONFIG.APP_NAME || 'RicaZo'}.</div>
       </div>
     `;
-    printDiv.innerHTML = html;
-    setTimeout(() => window.print(), 200);
+
+    this._imprimirSilencioso(html);
   }
 }
 
