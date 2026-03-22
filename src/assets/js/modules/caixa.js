@@ -127,7 +127,7 @@ class CaixaModule {
   abrirModalFechoCaixa() {
     const content = `
       <div class="card-header">
-        <h3 class="card-title">🔐 Fecho de Caixa (Contagem Cega)</h3>
+        <h3 class="card-title">🔐 Fechamento de Caixa (Contagem Cega)</h3>
         <button class="btn btn-ghost btn-sm" onclick="modal.close()">✕</button>
       </div>
       <form onsubmit="caixaModule.processarFechoCaixa(event)">
@@ -220,7 +220,7 @@ class CaixaModule {
       await this.init(); 
 
     } catch (error) {
-      alert('❌ Erro no fecho de caixa: ' + error.message);
+      alert('❌ Erro no fechamento de caixa: ' + error.message);
       btn.disabled = false;
       btn.innerHTML = 'Confirmar e Fechar Turno';
     }
@@ -960,32 +960,43 @@ class CaixaModule {
 
     const html = `
       <div class="ticket-header">
-        <div class="ticket-title">${isReimpressao ? '*** REIMPRESSÃO ***' : (CONFIG.APP_NAME || 'RicaZo')}</div>
-        <div class="ticket-info">${unidade.nome}</div>
-        <div class="ticket-info">${unidade.endereco || ''}</div>
-        <div class="ticket-divider"></div>
-        <div class="ticket-info"><strong>DATA:</strong> ${dataHora}</div>
-        <div class="ticket-info"><strong>CAIXA:</strong> ${atendente}</div>
-        <div class="ticket-info"><strong>PEDIDO:</strong> #${venda.id.substring(0,8).toUpperCase()} — <strong>${identificador}</strong></div>
-        <div class="ticket-divider"></div>
+        ${isReimpressao ? '<div class="ticket-reprint">*** REIMPRESSÃO ***</div>' : ''}
+        <div class="ticket-title">${CONFIG.APP_NAME || 'RicaZo'}</div>
+        <div class="ticket-subtitle">${unidade.nome}</div>
+        ${unidade.endereco ? `<div class="ticket-info">${unidade.endereco}</div>` : ''}
       </div>
+      <div class="ticket-divider"></div>
+
+      <table class="ticket-meta">
+        <tr><td><strong>DATA:</strong></td><td>${dataHora}</td></tr>
+        <tr><td><strong>CAIXA:</strong></td><td>${atendente}</td></tr>
+        <tr><td><strong>PEDIDO:</strong></td><td>#${venda.id.substring(0,8).toUpperCase()}</td></tr>
+      </table>
+      <div class="ticket-id-badge">${identificador}</div>
+      <div class="ticket-divider"></div>
+
       <table class="ticket-table">
         <thead><tr><th>QTD</th><th>PRODUTO</th><th>TOTAL</th></tr></thead>
         <tbody>${venda.itens.map(i => `<tr><td>${i.quantidade}</td><td>${i.produto?.nome || '—'}</td><td>R$ ${parseFloat(i.subtotal).toFixed(2)}</td></tr>`).join('')}</tbody>
       </table>
       <div class="ticket-divider"></div>
+
       <table class="ticket-totals">
         <tr><td>SUBTOTAL:</td><td>R$ ${subtotal.toFixed(2)}</td></tr>
         ${taxaValor > 0 ? `<tr><td>TAXA SERVIÇO (${taxaPercent}%):</td><td>R$ ${taxaValor.toFixed(2)}</td></tr>` : ''}
-        <tr><td class="bold">TOTAL A PAGAR:</td><td class="bold">R$ ${(subtotal + taxaValor).toFixed(2)}</td></tr>
-        <tr><td colspan="2" style="height:6px;"></td></tr>
+      </table>
+      <div class="ticket-total-grande">R$ ${(subtotal + taxaValor).toFixed(2)}</div>
+      <div class="ticket-divider"></div>
+
+      <table class="ticket-totals">
         ${pagamentos.map(p => `<tr><td>${p.forma_nome.toUpperCase()}:</td><td>R$ ${p.valor.toFixed(2)}</td></tr>`).join('')}
-        <tr><td class="bold">TROCO:</td><td class="bold">R$ ${trocoTotal.toFixed(2)}</td></tr>
+        ${trocoTotal > 0 ? `<tr><td class="bold">TROCO:</td><td class="bold">R$ ${trocoTotal.toFixed(2)}</td></tr>` : ''}
       </table>
       <div class="ticket-divider"></div>
+
       <div class="ticket-footer">
-        <div style="font-weight: 900; margin-bottom: 4px;">OBRIGADO PELA PREFERÊNCIA!</div>
-        <div style="font-size: 11px; font-weight: 600;">${new Date().getFullYear()} — ${CONFIG.APP_NAME || 'RicaZo'}</div>
+        <div class="ticket-thanks">OBRIGADO PELA PREFERÊNCIA!</div>
+        <div class="ticket-brand">${new Date().getFullYear()} — ${CONFIG.APP_NAME || 'RicaZo'}</div>
       </div>
     `;
     this._imprimirFallback(html);
@@ -996,7 +1007,7 @@ class CaixaModule {
     const inicio = new Date(turno.data_abertura).toLocaleString('pt-BR');
     const fim = new Date(turno.data_fechamento).toLocaleString('pt-BR');
     const operadorAbertura = this.usuarios[turno.usuario_abertura_id] || 'N/A';
-    const operadorFecho = this.usuarios[turno.usuario_fechamento_id] || 'N/A';
+    const operadorFechamento = this.usuarios[turno.usuario_fechamento_id] || 'N/A';
 
     const formasHtml = Object.entries(turno.detalhes_pagamentos).map(([forma, valor]) => `
       <tr><td>${forma.toUpperCase()}:</td><td>R$ ${parseFloat(valor).toFixed(2)}</td></tr>
@@ -1004,42 +1015,49 @@ class CaixaModule {
 
     const html = `
       <div class="ticket-header">
-        <div class="ticket-title">*** RELATÓRIO Z ***</div>
-        <div class="ticket-info" style="font-weight: 900;">FECHO DE CAIXA</div>
-        <div class="ticket-divider"></div>
-        <div class="ticket-info" style="text-align: left;">
-          <strong>LOJA:</strong> ${unidade.nome}<br>
-          <strong>ABERTURA:</strong> ${inicio}<br>
-          <strong>FECHO:</strong> ${fim}<br>
-          <strong>OP. ABERTURA:</strong> ${operadorAbertura}<br>
-          <strong>OP. FECHO:</strong> ${operadorFecho}<br>
-        </div>
-        <div class="ticket-divider"></div>
+        <div class="ticket-title">RELATÓRIO Z</div>
+        <div class="ticket-subtitle">FECHAMENTO DE CAIXA</div>
+        <div class="ticket-info">${unidade.nome}</div>
       </div>
+      <div class="ticket-divider"></div>
+
+      <table class="ticket-meta">
+        <tr><td><strong>LOJA:</strong></td><td>${unidade.nome}</td></tr>
+        <tr><td><strong>ABERTURA:</strong></td><td>${inicio}</td></tr>
+        <tr><td><strong>FECHAMENTO:</strong></td><td>${fim}</td></tr>
+        <tr><td><strong>OP. ABERTURA:</strong></td><td>${operadorAbertura}</td></tr>
+        <tr><td><strong>OP. FECHAMENTO:</strong></td><td>${operadorFechamento}</td></tr>
+      </table>
+      <div class="ticket-divider"></div>
 
       <div class="ticket-section-title">RESUMO FINANCEIRO</div>
       <table class="ticket-totals">
         <tr><td>FUNDO DE CAIXA (TROCO):</td><td>R$ ${parseFloat(turno.fundo_caixa).toFixed(2)}</td></tr>
-        <tr><td colspan="2"><div class="ticket-divider"></div></td></tr>
-
-        <tr><td colspan="2" style="font-weight: 900; padding-top: 5px;">RECEBIMENTOS DO TURNO:</td></tr>
-        ${formasHtml}
-
-        <tr><td colspan="2"><div class="ticket-divider"></div></td></tr>
-        <tr><td class="bold">TOTAL PRODUTOS (CASA):</td><td class="bold">R$ ${(parseFloat(turno.total_vendas) - totalTaxasRecolhidas).toFixed(2)}</td></tr>
-        <tr><td class="bold">TOTAL TAXAS SERVIÇO:</td><td class="bold">R$ ${parseFloat(totalTaxasRecolhidas).toFixed(2)}</td></tr>
-        <tr><td colspan="2" style="height:6px;"></td></tr>
-        <tr><td class="bold">TOTAL GERAL RECEBIDO:</td><td class="bold">R$ ${parseFloat(turno.total_vendas).toFixed(2)}</td></tr>
       </table>
-
       <div class="ticket-divider"></div>
+
+      <div class="ticket-section-title">RECEBIMENTOS DO TURNO</div>
+      <table class="ticket-totals">
+        ${formasHtml}
+      </table>
+      <div class="ticket-divider"></div>
+
+      <table class="ticket-totals">
+        <tr><td class="bold">TOTAL PRODUTOS:</td><td class="bold">R$ ${(parseFloat(turno.total_vendas) - totalTaxasRecolhidas).toFixed(2)}</td></tr>
+        <tr><td class="bold">TOTAL TAXAS:</td><td class="bold">R$ ${parseFloat(totalTaxasRecolhidas).toFixed(2)}</td></tr>
+      </table>
+      <div class="ticket-total-grande">R$ ${parseFloat(turno.total_vendas).toFixed(2)}</div>
+      <div class="ticket-divider"></div>
+
       <div class="ticket-section-title">AUDITORIA DE GAVETA</div>
       <table class="ticket-totals">
-        <tr><td>DINHEIRO ESPERADO (FUNDO + VENDAS):</td><td>R$ ${parseFloat(turno.total_dinheiro_sistema).toFixed(2)}</td></tr>
-        <tr><td>DINHEIRO DECLARADO PELO CAIXA:</td><td>R$ ${parseFloat(turno.total_dinheiro_informado).toFixed(2)}</td></tr>
-        <tr><td colspan="2"><div class="ticket-divider"></div></td></tr>
+        <tr><td>ESPERADO:</td><td>R$ ${parseFloat(turno.total_dinheiro_sistema).toFixed(2)}</td></tr>
+        <tr><td>DECLARADO:</td><td>R$ ${parseFloat(turno.total_dinheiro_informado).toFixed(2)}</td></tr>
+      </table>
+      <div class="ticket-divider"></div>
+      <table class="ticket-totals">
         <tr>
-          <td class="bold">DIFERENÇA (QUEBRA/SOBRA):</td>
+          <td class="bold">DIFERENÇA:</td>
           <td class="bold">R$ ${parseFloat(turno.diferenca_caixa).toFixed(2)}</td>
         </tr>
       </table>

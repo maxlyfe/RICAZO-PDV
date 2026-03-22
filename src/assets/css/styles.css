@@ -470,8 +470,45 @@ body { font-family: var(--font-family); background-color: var(--bg-primary); col
   .ticket-totals td:last-child { text-align: right; font-weight: 800; }
   .ticket-totals .bold { font-weight: 900; font-size: 16px; }
 
+  /* Subtítulo (ex: nome da loja, "FECHAMENTO DE CAIXA") */
+  .ticket-subtitle { font-size: 15px; font-weight: 800; margin-bottom: 2px; text-transform: uppercase; }
+
+  /* Metadados em tabela (DATA, CAIXA, PEDIDO, etc.) */
+  .ticket-meta { width: 100%; font-size: 12px; font-weight: 600; margin: 4px 0; }
+  .ticket-meta td { padding: 2px 0; vertical-align: top; }
+  .ticket-meta td:first-child { white-space: nowrap; padding-right: 6px; font-weight: 800; }
+
+  /* Badge de identificação (MESA X / BALCÃO) */
+  .ticket-id-badge {
+    text-align: center; font-size: 16px; font-weight: 900;
+    border: 2px solid #000; padding: 4px 8px; margin: 6px auto;
+    display: inline-block; width: auto; text-transform: uppercase;
+  }
+
+  /* Título de seção (RESUMO FINANCEIRO, AUDITORIA, etc.) */
+  .ticket-section-title {
+    font-size: 13px; font-weight: 900; text-transform: uppercase;
+    text-align: center; margin: 6px 0 4px; letter-spacing: 0.5px;
+    border-bottom: 1px solid #000; padding-bottom: 2px;
+  }
+
+  /* Total grande destacado */
+  .ticket-total-grande {
+    text-align: center; font-size: 22px; font-weight: 900;
+    margin: 6px 0; padding: 4px 0;
+    border-top: 2px solid #000; border-bottom: 2px solid #000;
+  }
+
+  /* Reimpressão */
+  .ticket-reprint {
+    font-size: 14px; font-weight: 900; text-align: center;
+    margin-bottom: 4px; letter-spacing: 1px;
+  }
+
   /* Footer */
   .ticket-footer { text-align: center; margin-top: 12px; font-size: 13px; font-weight: 700; margin-bottom: 15px; }
+  .ticket-thanks { font-size: 14px; font-weight: 900; margin-bottom: 4px; text-transform: uppercase; }
+  .ticket-brand { font-size: 11px; font-weight: 600; }
 }
 
 /* ==========================================================================

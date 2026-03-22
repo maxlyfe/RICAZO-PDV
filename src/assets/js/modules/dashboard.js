@@ -742,7 +742,7 @@ class DashboardModule {
                 <th>Status</th>
                 ${this.filtros.unidadeId === 'todas' ? '<th>Unidade</th>' : ''}
                 <th>Abertura</th>
-                <th>Fecho</th>
+                <th>Fechamento</th>
                 <th style="text-align: right;">Troco Inicial</th>
                 <th style="text-align: right;">Faturado (Liq)</th>
                 
@@ -770,7 +770,7 @@ class DashboardModule {
     const inicio = new Date(turno.data_abertura).toLocaleString('pt-BR');
     const fim = new Date(turno.data_fechamento).toLocaleString('pt-BR');
     const operadorAbertura = this.usuariosMap[turno.usuario_abertura_id] || 'N/A';
-    const operadorFecho = this.usuariosMap[turno.usuario_fechamento_id] || 'N/A';
+    const operadorFechamento = this.usuariosMap[turno.usuario_fechamento_id] || 'N/A';
 
     const formasHtml = Object.entries(turno.detalhes_pagamentos || {}).map(([forma, valor]) => `
       <tr><td>${forma.toUpperCase()}:</td><td>R$ ${parseFloat(valor).toFixed(2)}</td></tr>
@@ -778,46 +778,55 @@ class DashboardModule {
 
     const html = `
       <div class="ticket-header">
-        <div class="ticket-title">*** RELATÓRIO Z (VIA ADMIN) ***</div>
-        <div class="ticket-info" style="font-weight: 900;">FECHO DE CAIXA</div>
-        <div class="ticket-divider"></div>
-        <div class="ticket-info" style="text-align: left;">
-          <strong>LOJA:</strong> ${nomeUnidade}<br>
-          <strong>ABERTURA:</strong> ${inicio}<br>
-          <strong>FECHO:</strong> ${fim}<br>
-          <strong>OP. ABERTURA:</strong> ${operadorAbertura}<br>
-          <strong>OP. FECHO:</strong> ${operadorFecho}<br>
-        </div>
-        <div class="ticket-divider"></div>
+        <div class="ticket-title">RELATÓRIO Z</div>
+        <div class="ticket-subtitle">FECHAMENTO DE CAIXA (ADMIN)</div>
+        <div class="ticket-info">${nomeUnidade}</div>
       </div>
+      <div class="ticket-divider"></div>
+
+      <table class="ticket-meta">
+        <tr><td><strong>LOJA:</strong></td><td>${nomeUnidade}</td></tr>
+        <tr><td><strong>ABERTURA:</strong></td><td>${inicio}</td></tr>
+        <tr><td><strong>FECHAMENTO:</strong></td><td>${fim}</td></tr>
+        <tr><td><strong>OP. ABERTURA:</strong></td><td>${operadorAbertura}</td></tr>
+        <tr><td><strong>OP. FECHAMENTO:</strong></td><td>${operadorFechamento}</td></tr>
+      </table>
+      <div class="ticket-divider"></div>
 
       <div class="ticket-section-title">RESUMO FINANCEIRO</div>
       <table class="ticket-totals">
         <tr><td>FUNDO DE CAIXA (TROCO):</td><td>R$ ${parseFloat(turno.fundo_caixa).toFixed(2)}</td></tr>
-        <tr><td colspan="2"><div class="ticket-divider"></div></td></tr>
-
-        <tr><td colspan="2" style="font-weight: 900; padding-top: 5px;">RECEBIMENTOS DO TURNO:</td></tr>
-        ${formasHtml}
-
-        <tr><td colspan="2"><div class="ticket-divider"></div></td></tr>
-        <tr><td class="bold">TOTAL FATURADO (LIQUIDO):</td><td class="bold">R$ ${parseFloat(turno.total_vendas).toFixed(2)}</td></tr>
       </table>
-
       <div class="ticket-divider"></div>
+
+      <div class="ticket-section-title">RECEBIMENTOS DO TURNO</div>
+      <table class="ticket-totals">
+        ${formasHtml}
+      </table>
+      <div class="ticket-divider"></div>
+
+      <table class="ticket-totals">
+        <tr><td class="bold">TOTAL FATURADO:</td><td class="bold">R$ ${parseFloat(turno.total_vendas).toFixed(2)}</td></tr>
+      </table>
+      <div class="ticket-total-grande">R$ ${parseFloat(turno.total_vendas).toFixed(2)}</div>
+      <div class="ticket-divider"></div>
+
       <div class="ticket-section-title">AUDITORIA DE GAVETA</div>
       <table class="ticket-totals">
-        <tr><td>DINHEIRO ESPERADO (FUNDO + VENDAS):</td><td>R$ ${parseFloat(turno.total_dinheiro_sistema).toFixed(2)}</td></tr>
-        <tr><td>DINHEIRO DECLARADO PELO CAIXA:</td><td>R$ ${parseFloat(turno.total_dinheiro_informado).toFixed(2)}</td></tr>
-        <tr><td colspan="2"><div class="ticket-divider"></div></td></tr>
+        <tr><td>ESPERADO:</td><td>R$ ${parseFloat(turno.total_dinheiro_sistema).toFixed(2)}</td></tr>
+        <tr><td>DECLARADO:</td><td>R$ ${parseFloat(turno.total_dinheiro_informado).toFixed(2)}</td></tr>
+      </table>
+      <div class="ticket-divider"></div>
+      <table class="ticket-totals">
         <tr>
-          <td class="bold">DIFERENÇA (QUEBRA/SOBRA):</td>
+          <td class="bold">DIFERENÇA:</td>
           <td class="bold">R$ ${parseFloat(turno.diferenca_caixa).toFixed(2)}</td>
         </tr>
       </table>
 
       <div class="ticket-divider"></div>
       <div class="ticket-footer">
-        <div>Relatório reimpresso via Painel Administrativo.</div>
+        <div class="ticket-brand">Reimpresso via Painel Admin — ${CONFIG.APP_NAME || 'RicaZo'}</div>
       </div>
     `;
 
