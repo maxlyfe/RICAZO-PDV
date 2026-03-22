@@ -312,7 +312,10 @@ class CaixaModule {
           <span style="display: inline-block; width: 10px; height: 10px; border-radius: 50%; background: var(--success); margin-right: 5px;"></span>
           Turno Aberto (R$ ${parseFloat(this.turnoAtual.fundo_caixa).toFixed(2)})
         </div>
-        <div style="display: flex; gap: 0.35rem;">
+        <div style="display: flex; gap: 0.35rem; flex-wrap: wrap;">
+          <button class="btn btn-sm ${typeof printer !== 'undefined' && printer.connected ? 'btn-success' : 'btn-secondary'}" onclick="caixaModule.conectarImpressora()" title="${typeof printer !== 'undefined' && printer.connected ? 'Impressora conectada!' : 'Conectar impressora USB para impressão direta'}">
+            🖨️ ${typeof printer !== 'undefined' && printer.connected ? '✓' : ''}
+          </button>
           <button class="btn btn-sm btn-secondary" onclick="caixaModule.abrirHistoricoTurno()">
             🧾 Histórico
           </button>
@@ -939,95 +942,25 @@ class CaixaModule {
   }
 
   // ==========================================
-  // FUNÇÕES DE IMPRESSÃO (Silenciosa via iframe)
+  // FUNÇÕES DE IMPRESSÃO
+  // Prioridade: 1) USB Direto (ESC/POS) → 2) HTML fallback (window.print)
   // ==========================================
 
-  /**
-   * Imprime silenciosamente via iframe oculto.
-   * Evita o diálogo do Chrome — sai direto na impressora padrão.
-   * Fallback: se o iframe falhar, usa window.print() normalmente.
-   */
-  _imprimirSilencioso(conteudoHtml) {
-    const estiloTicket = `
-      @page { size: 80mm auto; margin: 0; }
-      * { margin: 0; padding: 0; box-sizing: border-box; }
-      body {
-        width: 72mm;
-        padding: 2mm 4mm;
-        font-family: 'Arial', 'Helvetica', sans-serif;
-        font-size: 13px;
-        font-weight: 600;
-        line-height: 1.4;
-        color: #000;
-        background: #fff;
-      }
-      .ticket-header { text-align: center; margin-bottom: 8px; }
-      .ticket-title { font-size: 22px; font-weight: 900; margin-bottom: 4px; text-transform: uppercase; letter-spacing: 1px; }
-      .ticket-info { font-size: 13px; font-weight: 600; line-height: 1.5; }
-      .ticket-info strong { font-weight: 900; }
-      .ticket-divider { border-top: 2px dashed #000; margin: 6px 0; }
-      .ticket-table { width: 100%; border-collapse: collapse; font-size: 13px; font-weight: 700; }
-      .ticket-table th { border-bottom: 2px solid #000; padding-bottom: 4px; font-size: 13px; font-weight: 900; text-transform: uppercase; }
-      .ticket-table th, .ticket-table td { text-align: left; vertical-align: top; padding: 4px 0; }
-      .ticket-table th:last-child, .ticket-table td:last-child { text-align: right; }
-      .ticket-table td:first-child { width: 30px; text-align: center; font-weight: 800; }
-      .ticket-table td:nth-child(2) { font-weight: 700; padding-right: 6px; }
-      .ticket-table td:last-child { font-weight: 800; white-space: nowrap; }
-      .ticket-totals { width: 100%; margin-top: 6px; font-size: 13px; font-weight: 700; }
-      .ticket-totals td { padding: 3px 0; font-weight: 700; }
-      .ticket-totals td:last-child { text-align: right; font-weight: 800; }
-      .ticket-totals .bold { font-weight: 900; font-size: 16px; }
-      .ticket-section-title { font-weight: 900; text-align: center; margin: 6px 0; font-size: 14px; }
-      .ticket-footer { text-align: center; margin-top: 12px; font-size: 13px; font-weight: 700; margin-bottom: 15px; }
-    `;
-
-    // Tenta impressão silenciosa via iframe
-    try {
-      let iframe = document.getElementById('ricazo-print-frame');
-      if (iframe) iframe.remove();
-
-      iframe = document.createElement('iframe');
-      iframe.id = 'ricazo-print-frame';
-      iframe.style.cssText = 'position:fixed;left:-9999px;top:-9999px;width:80mm;height:0;border:none;visibility:hidden;';
-      document.body.appendChild(iframe);
-
-      const doc = iframe.contentDocument || iframe.contentWindow.document;
-      doc.open();
-      doc.write(`<!DOCTYPE html><html><head><style>${estiloTicket}</style></head><body>${conteudoHtml}</body></html>`);
-      doc.close();
-
-      iframe.onload = () => {
-        try {
-          iframe.contentWindow.focus();
-          iframe.contentWindow.print();
-        } catch (e) {
-          // Fallback: imprime pela janela principal
-          this._imprimirFallback(conteudoHtml);
-        }
-        // Limpa o iframe após impressão
-        setTimeout(() => { if (iframe.parentNode) iframe.remove(); }, 3000);
-      };
-
-      // Se o iframe já carregou (sync), dispara agora
-      if (doc.readyState === 'complete') {
-        setTimeout(() => {
-          try {
-            iframe.contentWindow.focus();
-            iframe.contentWindow.print();
-          } catch (e) {
-            this._imprimirFallback(conteudoHtml);
-          }
-          setTimeout(() => { if (iframe.parentNode) iframe.remove(); }, 3000);
-        }, 100);
-      }
-
-    } catch (e) {
-      console.warn('Impressão via iframe falhou, usando fallback:', e);
-      this._imprimirFallback(conteudoHtml);
+  /** Conectar impressora USB (chamado pelo botão na UI) */
+  async conectarImpressora() {
+    if (typeof printer === 'undefined') {
+      alert('⚠️ Módulo de impressão não carregado.');
+      return;
+    }
+    const ok = await printer.connect();
+    if (ok) {
+      alert('✅ Impressora conectada: ' + (printer.device?.productName || 'USB'));
+    } else {
+      alert('⚠️ Nenhuma impressora selecionada. A impressão continuará pelo Chrome.');
     }
   }
 
-  /** Fallback: usa print-section + window.print() */
+  /** Fallback HTML: usa print-section + window.print() (abre diálogo do Chrome) */
   _imprimirFallback(conteudoHtml) {
     let printDiv = document.getElementById('print-section');
     if (!printDiv) { printDiv = document.createElement('div'); printDiv.id = 'print-section'; document.body.appendChild(printDiv); }
@@ -1035,17 +968,44 @@ class CaixaModule {
     setTimeout(() => window.print(), 150);
   }
 
-  imprimirTicket(venda, pagamentos, trocoTotal, subtotal, taxaValor, taxaPercent, isReimpressao = false) {
+  async imprimirTicket(venda, pagamentos, trocoTotal, subtotal, taxaValor, taxaPercent, isReimpressao = false) {
     const unidade = auth.getUnidadeAtual();
     const dataHora = venda.data_fechamento ? new Date(venda.data_fechamento).toLocaleString('pt-BR') : new Date().toLocaleString('pt-BR');
     const atendente = auth.getCurrentUser()?.nome || 'Operador';
     const mesa = this.mesas.find(m => m.id === venda.mesa_id);
     const identificador = venda.tipo === 'balcao' ? 'BALCÃO' : `MESA ${mesa ? mesa.numero : venda.identificador}`;
-    const tituloDoc = isReimpressao ? '*** REIMPRESSÃO ***' : (CONFIG.APP_NAME || 'RicaZo');
+    const tituloDoc = isReimpressao ? '*** REIMPRESSAO ***' : (CONFIG.APP_NAME || 'RicaZo').toUpperCase();
 
+    // ── TENTATIVA 1: Impressão direta via USB (ESC/POS) ──
+    if (typeof printer !== 'undefined' && printer.connected) {
+      const ok = await printer.printTicket({
+        titulo: tituloDoc,
+        loja: unidade.nome,
+        endereco: unidade.endereco || '',
+        data: dataHora,
+        caixa: atendente,
+        pedido: `#${venda.id.substring(0,8).toUpperCase()}`,
+        identificador: identificador,
+        itens: venda.itens.map(i => ({
+          qtd: i.quantidade,
+          nome: i.produto?.nome || '-',
+          total: parseFloat(i.subtotal).toFixed(2)
+        })),
+        subtotal: subtotal.toFixed(2),
+        taxaPercent: taxaPercent,
+        taxaValor: taxaValor.toFixed(2),
+        total: (subtotal + taxaValor).toFixed(2),
+        pagamentos: pagamentos.map(p => ({ nome: p.forma_nome, valor: p.valor.toFixed(2) })),
+        troco: trocoTotal.toFixed(2)
+      });
+      if (ok) return; // Impresso com sucesso via USB!
+      console.warn('🖨️ USB falhou, usando fallback HTML...');
+    }
+
+    // ── TENTATIVA 2: Fallback HTML (window.print) ──
     const html = `
       <div class="ticket-header">
-        <div class="ticket-title">${tituloDoc}</div>
+        <div class="ticket-title">${isReimpressao ? '*** REIMPRESSÃO ***' : (CONFIG.APP_NAME || 'RicaZo')}</div>
         <div class="ticket-info">${unidade.nome}</div>
         <div class="ticket-info">${unidade.endereco || ''}</div>
         <div class="ticket-divider"></div>
@@ -1073,18 +1033,40 @@ class CaixaModule {
         <div style="font-size: 11px; font-weight: 600;">${new Date().getFullYear()} — ${CONFIG.APP_NAME || 'RicaZo'}</div>
       </div>
     `;
-
-    this._imprimirSilencioso(html);
+    this._imprimirFallback(html);
   }
 
-  imprimirRelatorioZ(turno, totalTaxasRecolhidas) {
+  async imprimirRelatorioZ(turno, totalTaxasRecolhidas) {
     const unidade = auth.getUnidadeAtual();
     const inicio = new Date(turno.data_abertura).toLocaleString('pt-BR');
     const fim = new Date(turno.data_fechamento).toLocaleString('pt-BR');
     const operadorAbertura = this.usuarios[turno.usuario_abertura_id] || 'N/A';
     const operadorFecho = this.usuarios[turno.usuario_fechamento_id] || 'N/A';
+    const formasEntries = Object.entries(turno.detalhes_pagamentos);
 
-    const formasHtml = Object.entries(turno.detalhes_pagamentos).map(([forma, valor]) => `
+    // ── TENTATIVA 1: Impressão direta via USB (ESC/POS) ──
+    if (typeof printer !== 'undefined' && printer.connected) {
+      const ok = await printer.printRelatorioZ({
+        loja: unidade.nome,
+        inicio: inicio,
+        fim: fim,
+        opAbertura: operadorAbertura,
+        opFecho: operadorFecho,
+        fundo: parseFloat(turno.fundo_caixa).toFixed(2),
+        formas: formasEntries.map(([f, v]) => [f, parseFloat(v).toFixed(2)]),
+        totalProdutos: (parseFloat(turno.total_vendas) - totalTaxasRecolhidas).toFixed(2),
+        totalTaxas: parseFloat(totalTaxasRecolhidas).toFixed(2),
+        totalGeral: parseFloat(turno.total_vendas).toFixed(2),
+        dinheiroEsperado: parseFloat(turno.total_dinheiro_sistema).toFixed(2),
+        dinheiroDeclarado: parseFloat(turno.total_dinheiro_informado).toFixed(2),
+        diferenca: parseFloat(turno.diferenca_caixa).toFixed(2)
+      });
+      if (ok) return;
+      console.warn('🖨️ USB falhou, usando fallback HTML...');
+    }
+
+    // ── TENTATIVA 2: Fallback HTML ──
+    const formasHtml = formasEntries.map(([forma, valor]) => `
       <tr><td>${forma.toUpperCase()}:</td><td>R$ ${parseFloat(valor).toFixed(2)}</td></tr>
     `).join('');
 
@@ -1135,8 +1117,7 @@ class CaixaModule {
         <div>Relatório gerado pelo sistema ${CONFIG.APP_NAME || 'RicaZo'}.</div>
       </div>
     `;
-
-    this._imprimirSilencioso(html);
+    this._imprimirFallback(html);
   }
 }
 

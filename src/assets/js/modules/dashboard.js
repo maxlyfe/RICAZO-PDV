@@ -821,16 +821,33 @@ class DashboardModule {
       </div>
     `;
 
-    // Usa o mesmo sistema de impressão silenciosa do caixaModule
-    if (typeof caixaModule !== 'undefined' && caixaModule._imprimirSilencioso) {
-      caixaModule._imprimirSilencioso(html);
+    // Tenta impressão direta USB, senão usa HTML fallback
+    if (typeof printer !== 'undefined' && printer.connected) {
+      const formasEntries = Object.entries(turno.detalhes_pagamentos || {});
+      printer.printRelatorioZ({
+        loja: nomeUnidade,
+        inicio, fim,
+        opAbertura: operadorAbertura,
+        opFecho: operadorFecho,
+        fundo: parseFloat(turno.fundo_caixa).toFixed(2),
+        formas: formasEntries.map(([f, v]) => [f, parseFloat(v).toFixed(2)]),
+        totalGeral: parseFloat(turno.total_vendas).toFixed(2),
+        dinheiroEsperado: parseFloat(turno.total_dinheiro_sistema).toFixed(2),
+        dinheiroDeclarado: parseFloat(turno.total_dinheiro_informado).toFixed(2),
+        diferenca: parseFloat(turno.diferenca_caixa).toFixed(2)
+      }).then(ok => {
+        if (!ok) this._printHtmlFallback(html);
+      });
     } else {
-      // Fallback direto
-      let printDiv = document.getElementById('print-section');
-      if (!printDiv) { printDiv = document.createElement('div'); printDiv.id = 'print-section'; document.body.appendChild(printDiv); }
-      printDiv.innerHTML = html;
-      setTimeout(() => window.print(), 200);
+      this._printHtmlFallback(html);
     }
+  }
+
+  _printHtmlFallback(html) {
+    let printDiv = document.getElementById('print-section');
+    if (!printDiv) { printDiv = document.createElement('div'); printDiv.id = 'print-section'; document.body.appendChild(printDiv); }
+    printDiv.innerHTML = html;
+    setTimeout(() => window.print(), 200);
   }
 
   renderGrafico() {
