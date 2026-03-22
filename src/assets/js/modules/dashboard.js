@@ -772,61 +772,46 @@ class DashboardModule {
     const operadorAbertura = this.usuariosMap[turno.usuario_abertura_id] || 'N/A';
     const operadorFechamento = this.usuariosMap[turno.usuario_fechamento_id] || 'N/A';
 
-    const formasHtml = Object.entries(turno.detalhes_pagamentos || {}).map(([forma, valor]) => `
-      <tr><td>${forma.toUpperCase()}:</td><td>R$ ${parseFloat(valor).toFixed(2)}</td></tr>
-    `).join('');
+    const formasHtml = Object.entries(turno.detalhes_pagamentos || {}).map(([forma, valor]) =>
+      `<div class="tk-row"><span>${forma.toUpperCase()}</span><span>R$ ${parseFloat(valor).toFixed(2)}</span></div>`
+    ).join('');
 
     const html = `
       <div class="ticket-header">
         <div class="ticket-title">RELATÓRIO Z</div>
-        <div class="ticket-subtitle">FECHAMENTO DE CAIXA (ADMIN)</div>
+        <div class="ticket-subtitle">FECHAMENTO (ADMIN)</div>
         <div class="ticket-info">${nomeUnidade}</div>
       </div>
       <div class="ticket-divider"></div>
 
-      <table class="ticket-meta">
-        <tr><td><strong>LOJA:</strong></td><td>${nomeUnidade}</td></tr>
-        <tr><td><strong>ABERTURA:</strong></td><td>${inicio}</td></tr>
-        <tr><td><strong>FECHAMENTO:</strong></td><td>${fim}</td></tr>
-        <tr><td><strong>OP. ABERTURA:</strong></td><td>${operadorAbertura}</td></tr>
-        <tr><td><strong>OP. FECHAMENTO:</strong></td><td>${operadorFechamento}</td></tr>
-      </table>
+      <div class="tk-line"><b>LOJA:</b> ${nomeUnidade}</div>
+      <div class="tk-line"><b>ABERTURA:</b> ${inicio}</div>
+      <div class="tk-line"><b>FECHAMENTO:</b> ${fim}</div>
+      <div class="tk-line"><b>OP. ABERT:</b> ${operadorAbertura}</div>
+      <div class="tk-line"><b>OP. FECHA:</b> ${operadorFechamento}</div>
       <div class="ticket-divider"></div>
 
-      <div class="ticket-section-title">RESUMO FINANCEIRO</div>
-      <table class="ticket-totals">
-        <tr><td>FUNDO CAIXA:</td><td>R$ ${parseFloat(turno.fundo_caixa).toFixed(2)}</td></tr>
-      </table>
+      <div class="ticket-section-title">RESUMO</div>
+      <div class="tk-row"><span>FUNDO CAIXA</span><span>R$ ${parseFloat(turno.fundo_caixa).toFixed(2)}</span></div>
       <div class="ticket-divider"></div>
 
-      <div class="ticket-section-title">RECEBIMENTOS DO TURNO</div>
-      <table class="ticket-totals">
-        ${formasHtml}
-      </table>
+      <div class="ticket-section-title">RECEBIMENTOS</div>
+      ${formasHtml}
       <div class="ticket-divider"></div>
 
-      <table class="ticket-totals">
-        <tr><td class="bold">TOTAL FATURADO:</td><td class="bold">R$ ${parseFloat(turno.total_vendas).toFixed(2)}</td></tr>
-      </table>
+      <div class="tk-row tk-bold"><span>FATURADO</span><span>R$ ${parseFloat(turno.total_vendas).toFixed(2)}</span></div>
       <div class="ticket-total-grande">R$ ${parseFloat(turno.total_vendas).toFixed(2)}</div>
       <div class="ticket-divider"></div>
 
-      <div class="ticket-section-title">AUDITORIA DE GAVETA</div>
-      <table class="ticket-totals">
-        <tr><td>ESPERADO:</td><td>R$ ${parseFloat(turno.total_dinheiro_sistema).toFixed(2)}</td></tr>
-        <tr><td>DECLARADO:</td><td>R$ ${parseFloat(turno.total_dinheiro_informado).toFixed(2)}</td></tr>
-      </table>
+      <div class="ticket-section-title">GAVETA</div>
+      <div class="tk-row"><span>ESPERADO</span><span>R$ ${parseFloat(turno.total_dinheiro_sistema).toFixed(2)}</span></div>
+      <div class="tk-row"><span>DECLARADO</span><span>R$ ${parseFloat(turno.total_dinheiro_informado).toFixed(2)}</span></div>
       <div class="ticket-divider"></div>
-      <table class="ticket-totals">
-        <tr>
-          <td class="bold">DIFERENÇA:</td>
-          <td class="bold">R$ ${parseFloat(turno.diferenca_caixa).toFixed(2)}</td>
-        </tr>
-      </table>
+      <div class="tk-row tk-bold"><span>DIFERENÇA</span><span>R$ ${parseFloat(turno.diferenca_caixa).toFixed(2)}</span></div>
 
       <div class="ticket-divider"></div>
       <div class="ticket-footer">
-        <div class="ticket-brand">Reimpresso via Painel Admin — ${CONFIG.APP_NAME || 'RicaZo'}</div>
+        <div class="ticket-brand">Admin — ${CONFIG.APP_NAME || 'RicaZo'}</div>
       </div>
     `;
 
