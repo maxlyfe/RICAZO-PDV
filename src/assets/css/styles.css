@@ -431,6 +431,9 @@ body { font-family: var(--font-family); background-color: var(--bg-primary); col
   html, body {
     margin: 0 !important; padding: 0 !important;
     background: white !important;
+    width: auto !important;
+    height: auto !important;
+    overflow: visible !important;
   }
   .dashboard, .modal-overlay, .modal-pagamento-overlay,
   .toast-container, .theme-toggle { display: none !important; }
@@ -439,8 +442,8 @@ body { font-family: var(--font-family); background-color: var(--bg-primary); col
   #print-section {
     display: block !important;
     visibility: visible !important;
-    position: fixed;
-    left: 0; top: 0;
+    position: static !important;
+    float: none !important;
     width: 100%;
     max-width: 100%;
     padding: 0;
@@ -450,11 +453,15 @@ body { font-family: var(--font-family); background-color: var(--bg-primary); col
     font-size: 12px;
     font-weight: 600;
     line-height: 1.5;
+    page-break-inside: avoid;
+    break-inside: avoid;
   }
   #print-section * {
     visibility: visible !important;
     box-sizing: border-box;
     max-width: 100%;
+    page-break-inside: avoid;
+    break-inside: avoid;
   }
 
   /* ===== LAYOUT: LINHA FLEX (label....valor) ===== */
