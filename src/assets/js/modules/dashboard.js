@@ -795,7 +795,7 @@ class DashboardModule {
 
       <div class="ticket-section-title">RESUMO FINANCEIRO</div>
       <table class="ticket-totals">
-        <tr><td>FUNDO DE CAIXA (TROCO):</td><td>R$ ${parseFloat(turno.fundo_caixa).toFixed(2)}</td></tr>
+        <tr><td>FUNDO CAIXA:</td><td>R$ ${parseFloat(turno.fundo_caixa).toFixed(2)}</td></tr>
       </table>
       <div class="ticket-divider"></div>
 

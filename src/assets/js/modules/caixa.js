@@ -1089,7 +1089,7 @@ class CaixaModule {
 
       <table class="ticket-totals">
         <tr><td>SUBTOTAL:</td><td>R$ ${subtotal.toFixed(2)}</td></tr>
-        ${taxaValor > 0 ? `<tr><td>TAXA SERVIÇO (${taxaPercent}%):</td><td>R$ ${taxaValor.toFixed(2)}</td></tr>` : ''}
+        ${taxaValor > 0 ? `<tr><td>TAXA ${taxaPercent}%:</td><td>R$ ${taxaValor.toFixed(2)}</td></tr>` : ''}
       </table>
       <div class="ticket-total-grande">R$ ${(subtotal + taxaValor).toFixed(2)}</div>
       <div class="ticket-divider"></div>
@@ -1138,7 +1138,7 @@ class CaixaModule {
 
       <div class="ticket-section-title">RESUMO FINANCEIRO</div>
       <table class="ticket-totals">
-        <tr><td>FUNDO DE CAIXA (TROCO):</td><td>R$ ${parseFloat(turno.fundo_caixa).toFixed(2)}</td></tr>
+        <tr><td>FUNDO CAIXA:</td><td>R$ ${parseFloat(turno.fundo_caixa).toFixed(2)}</td></tr>
       </table>
       <div class="ticket-divider"></div>
 
