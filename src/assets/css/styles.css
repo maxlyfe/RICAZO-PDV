@@ -424,71 +424,59 @@ body { font-family: var(--font-family); background-color: var(--bg-primary); col
    🖨️ IMPRESSÃO TÉRMICA - Otimizado para 80mm (Fonte legível e negrito forte)
    ========================================================================== */
 @media print {
-  @page { size: 80mm auto; margin: 0mm; }
+  @page { size: 80mm auto; margin: 2mm; }
 
   /* Esconde TUDO da tela */
-  body * { visibility: hidden; }
+  * { visibility: hidden !important; margin: 0; padding: 0; }
   html, body {
-    margin: 0 !important; padding: 0 !important;
-    width: 80mm !important; max-width: 80mm !important;
+    width: 80mm !important;
     background: white !important;
-    overflow: visible !important;
   }
-  .dashboard, .modal-overlay, .modal-pagamento-overlay, .toast-container, .theme-toggle { display: none !important; }
+  .dashboard, .modal-overlay, .modal-pagamento-overlay,
+  .toast-container, .theme-toggle { display: none !important; }
 
   /* ===== AREA DE IMPRESSÃO ===== */
   #print-section {
     display: block !important;
     visibility: visible !important;
-    position: absolute;
-    left: 0; top: 0;
-    width: 68mm;
-    max-width: 68mm;
-    padding: 3mm 2mm 5mm 2mm;
-    margin: 0;
-    box-sizing: border-box;
+    position: fixed;
+    left: 1mm; top: 1mm;
+    width: 56mm;
     color: #000;
     font-family: 'Arial', 'Helvetica', sans-serif;
-    font-size: 11px;
+    font-size: 12px;
     font-weight: 600;
-    line-height: 1.3;
+    line-height: 1.4;
     -webkit-print-color-adjust: exact;
     print-color-adjust: exact;
-    overflow: visible;
   }
   #print-section * {
     visibility: visible !important;
     box-sizing: border-box;
   }
-  /* Tabelas NUNCA excedem o container */
-  #print-section table {
-    max-width: 100% !important;
-    width: 100% !important;
-    table-layout: auto !important;
-  }
 
-  /* ===== HEADER (centralizado) ===== */
+  /* ===== HEADER ===== */
   .ticket-header {
     text-align: center;
-    margin-bottom: 5px;
+    margin-bottom: 8px;
   }
   .ticket-title {
-    font-size: 18px;
+    font-size: 20px;
     font-weight: 900;
-    margin: 0 0 2px 0;
+    margin-bottom: 4px;
     text-transform: uppercase;
     letter-spacing: 1px;
   }
   .ticket-subtitle {
-    font-size: 12px;
+    font-size: 14px;
     font-weight: 800;
-    margin: 0 0 2px 0;
+    margin-bottom: 3px;
     text-transform: uppercase;
   }
   .ticket-info {
-    font-size: 10px;
+    font-size: 12px;
     font-weight: 600;
-    line-height: 1.3;
+    line-height: 1.4;
   }
   .ticket-info strong { font-weight: 900; }
 
@@ -496,152 +484,148 @@ body { font-family: var(--font-family); background-color: var(--bg-primary); col
   .ticket-divider {
     border: none;
     border-top: 1px dashed #000;
-    margin: 3px 0;
-    padding: 0;
+    margin: 8px 0;
   }
 
-  /* ===== METADADOS (DATA, CAIXA, PEDIDO) ===== */
+  /* ===== METADADOS ===== */
   .ticket-meta {
+    width: 100%;
     border-collapse: collapse;
-    font-size: 10px;
+    font-size: 12px;
     font-weight: 600;
-    margin: 2px 0;
+    margin: 6px 0;
   }
   .ticket-meta td {
-    padding: 1px 0;
+    padding: 2px 0;
     vertical-align: top;
   }
   .ticket-meta td:first-child {
     white-space: nowrap;
-    padding-right: 4px;
+    padding-right: 6px;
     font-weight: 800;
   }
-  .ticket-meta td:last-child {
-    word-break: break-word;
-  }
 
-  /* ===== BADGE (MESA X / BALCÃO) ===== */
+  /* ===== BADGE ===== */
   .ticket-id-badge {
     text-align: center;
-    font-size: 13px;
+    font-size: 14px;
     font-weight: 900;
     border: 2px solid #000;
-    padding: 2px 6px;
-    margin: 3px auto;
+    padding: 4px 10px;
+    margin: 8px auto;
     display: block;
     width: fit-content;
     text-transform: uppercase;
   }
 
-  /* ===== TABELA DE ITENS (3 colunas: QTD | PRODUTO | TOTAL) ===== */
+  /* ===== TABELA DE ITENS ===== */
   .ticket-table {
+    width: 100%;
     border-collapse: collapse;
-    font-size: 10px;
+    font-size: 12px;
     font-weight: 700;
   }
   .ticket-table th {
     border-bottom: 1px solid #000;
-    padding-bottom: 2px;
-    font-size: 10px;
+    padding-bottom: 3px;
     font-weight: 900;
     text-transform: uppercase;
   }
   .ticket-table th, .ticket-table td {
     text-align: left;
     vertical-align: top;
-    padding: 2px 2px 2px 0;
+    padding: 3px 0;
   }
-  /* Coluna QTD — compacta */
-  .ticket-table th:first-child, .ticket-table td:first-child {
+  .ticket-table td:first-child {
     text-align: center;
     font-weight: 800;
     white-space: nowrap;
+    width: 20px;
     padding-right: 4px;
   }
-  /* Coluna PRODUTO — flexível, quebra texto */
-  .ticket-table th:nth-child(2), .ticket-table td:nth-child(2) {
+  .ticket-table td:nth-child(2) {
     font-weight: 700;
     word-break: break-word;
+    padding-right: 4px;
   }
-  /* Coluna TOTAL — alinhada à direita, nunca quebra */
-  .ticket-table th:last-child, .ticket-table td:last-child {
+  .ticket-table td:last-child {
     text-align: right;
     font-weight: 800;
     white-space: nowrap;
-    padding-left: 4px;
   }
 
-  /* ===== TOTAIS (2 colunas: LABEL | VALOR) ===== */
+  /* ===== TOTAIS ===== */
   .ticket-totals {
+    width: 100%;
     border-collapse: collapse;
-    margin-top: 2px;
-    font-size: 10px;
+    margin: 4px 0;
+    font-size: 12px;
     font-weight: 700;
   }
+  .ticket-totals td {
+    padding: 3px 0;
+  }
   .ticket-totals td:first-child {
-    padding: 2px 4px 2px 0;
     font-weight: 700;
-    word-break: break-word;
+    padding-right: 6px;
   }
   .ticket-totals td:last-child {
     text-align: right;
     font-weight: 800;
     white-space: nowrap;
-    padding: 2px 0;
   }
   .ticket-totals .bold {
     font-weight: 900;
-    font-size: 12px;
+    font-size: 14px;
   }
 
   /* ===== TÍTULO DE SEÇÃO ===== */
   .ticket-section-title {
-    font-size: 10px;
+    font-size: 12px;
     font-weight: 900;
     text-transform: uppercase;
     text-align: center;
-    margin: 3px 0 2px;
-    letter-spacing: 0.5px;
+    margin: 8px 0 4px;
     border-bottom: 1px solid #000;
-    padding-bottom: 1px;
+    padding-bottom: 3px;
   }
 
   /* ===== TOTAL GRANDE ===== */
   .ticket-total-grande {
     text-align: center;
-    font-size: 16px;
+    font-size: 20px;
     font-weight: 900;
-    margin: 3px 0;
-    padding: 2px 0;
+    margin: 6px 0;
+    padding: 6px 0;
     border-top: 2px solid #000;
     border-bottom: 2px solid #000;
   }
 
   /* ===== REIMPRESSÃO ===== */
   .ticket-reprint {
-    font-size: 11px;
+    font-size: 13px;
     font-weight: 900;
     text-align: center;
-    margin-bottom: 2px;
+    margin-bottom: 4px;
     letter-spacing: 1px;
   }
 
   /* ===== FOOTER ===== */
   .ticket-footer {
     text-align: center;
-    margin-top: 6px;
-    font-size: 10px;
+    margin-top: 12px;
+    margin-bottom: 15px;
+    font-size: 12px;
     font-weight: 700;
-    margin-bottom: 8px;
   }
   .ticket-thanks {
-    font-size: 11px;
+    font-size: 13px;
     font-weight: 900;
-    margin-bottom: 2px;
+    margin-bottom: 4px;
     text-transform: uppercase;
   }
   .ticket-brand {
-    font-size: 9px;
+    font-size: 10px;
     font-weight: 600;
   }
 }
