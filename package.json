@@ -1,0 +1,11 @@
+{
+  "name": "ricaso-pdv",
+  "version": "1.0.0",
+  "description": "Sistema de Controle de Vendas para Rede de Padarias",
+  "scripts": {
+    "dev": "node server.js",
+    "start": "node server.js"
+  },
+  "devDependencies": {},
+  "dependencies": {}
+}

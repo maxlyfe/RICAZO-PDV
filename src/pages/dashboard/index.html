@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="pt-BR" data-theme="light">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Dashboard | RicaZo</title>
+  <link rel="stylesheet" href="/src/assets/css/styles.css">
+</head>
+<body>
+  <div class="dashboard">
+    <!-- Header -->
+    <header class="dashboard-header">
+      <!-- Logo clicável com ID para voltar a home -->
+      <div class="dashboard-logo" id="logo-ricazo" title="Voltar para a Home">
+        <span style="font-size: 2rem;">🥖</span>
+        <span>RicaZo</span>
+      </div>
+      
+      <nav class="dashboard-nav">
+        <!-- Navegação rápida entre perfis (ex: Caixa <-> PDV) -->
+        <div id="nav-perfis" class="nav-perfis"></div>
+
+        <!-- Info da unidade atual (Clicável para trocar) -->
+        <div id="unidade-atual" class="unidade-atual-badge" style="display: none;" title="Trocar de Unidade"></div>
+        
+        <div class="user-info">
+          <div class="user-avatar" id="user-avatar">U</div>
+          <div class="user-details">
+            <span class="user-name" id="user-name">Utilizador</span>
+            <span class="user-role" id="user-role">Perfil</span>
+          </div>
+          <div id="user-perfis" style="margin-left: 1rem; display: flex; gap: 0.5rem;"></div>
+        </div>
+        
+        <div class="header-actions">
+          <button class="theme-toggle" id="theme-toggle" title="Alternar tema">🌙</button>
+          <button class="btn btn-ghost btn-sm" id="btn-logout">🚪 Sair</button>
+        </div>
+      </nav>
+    </header>
+
+    <!-- Main Content -->
+    <main class="dashboard-main">
+      <div id="dashboard-content"></div>
+    </main>
+  </div>
+
+  <!-- BIBLIOTECA DE GRÁFICOS (Adicionado) -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+  <!-- Scripts na ordem correta -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  
+  <!-- Config -->
+  <script src="/src/assets/js/config/config.local.js"></script>
+  <script src="/src/assets/js/config/config.js"></script>
+  
+  <!-- Core -->
+  <script src="/src/assets/js/core/supabase.js"></script>
+  <script src="/src/assets/js/core/auth.js"></script>
+  
+  <!-- Utils -->
+  <script src="/src/assets/js/utils/modal.js"></script>
+  
+  <!-- Modules -->
+  <script src="/src/assets/js/modules/dashboard.js"></script>
+  <script src="/src/assets/js/modules/unidades.js"></script>
+  <script src="/src/assets/js/modules/usuarios.js"></script>
+  <script src="/src/assets/js/modules/produtos.js"></script>
+  <script src="/src/assets/js/modules/producao.js"></script>
+  <script src="/src/assets/js/modules/pdv.js"></script>
+  <script src="/src/assets/js/modules/caixa.js"></script>
+  <script src="/src/assets/js/modules/estoque.js"></script>
+  
+  <!-- App -->
+  <script src="/src/assets/js/core/app.js"></script>
+</body>
+</html>
