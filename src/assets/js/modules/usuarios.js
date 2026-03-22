@@ -142,10 +142,12 @@ class UsuariosModule {
         </label>
       `).join('');
 
-    // Agora usa 'this.unidades' que foi carregado no 'load()'
-    const unidadesOptions = this.unidades.map(u => 
-      `<option value="${u.id}">${u.nome}</option>`
-    ).join('');
+    const unidadesCheckboxes = this.unidades.map(u => `
+      <label style="display: flex; align-items: center; gap: 0.5rem; padding: 0.5rem 1rem; background: var(--bg-secondary); border-radius: var(--border-radius); cursor: pointer;">
+        <input type="checkbox" name="unidades" value="${u.id}" class="unidade-cb">
+        <span style="font-weight: 600;">${u.nome}</span>
+      </label>
+    `).join('');
 
     const content = `
       <div class="card-header">
@@ -158,7 +160,7 @@ class UsuariosModule {
           ${modal.formGroup('Username *', modal.input('username', 'text', 'Ex: joao.silva', true))}
         </div>
         ${modal.formGroup('Senha *', modal.input('senha', 'text', 'Mínimo 4 caracteres', true))}
-        
+
         <div class="form-group">
           <label class="form-label">Perfis * (selecione um ou mais)</label>
           <div style="display: flex; flex-wrap: wrap; gap: 0.5rem; margin-top: 0.5rem;">
@@ -166,14 +168,18 @@ class UsuariosModule {
           </div>
         </div>
 
-        ${modal.formGroup('Unidades de Acesso', `
-          <select name="unidades" class="form-input" multiple size="4" style="height: auto;">
-            <option value="">Todas as unidades (DEV/Admin)</option>
-            ${unidadesOptions}
-          </select>
-          <small style="color: var(--text-muted);">Segure Ctrl para selecionar múltiplas</small>
-        `)}
-        
+        <div class="form-group">
+          <label class="form-label">Unidades de Acesso</label>
+          <div style="margin-top: 0.5rem; display: flex; flex-direction: column; gap: 0.5rem;">
+            <label style="display: flex; align-items: center; gap: 0.5rem; padding: 0.5rem 1rem; background: var(--primary); color: #fff; border-radius: var(--border-radius); cursor: pointer; font-weight: 700;">
+              <input type="checkbox" id="cb-todas-unidades" onchange="usuariosModule.toggleTodasUnidades(this.checked)">
+              <span>✅ Todas as unidades</span>
+            </label>
+            ${unidadesCheckboxes}
+          </div>
+          <small style="color: var(--text-muted); margin-top: 0.25rem; display: block;">Sem nenhuma selecionada = sem acesso a unidades</small>
+        </div>
+
         ${modal.actions()}
       </form>
     `;
@@ -185,7 +191,7 @@ class UsuariosModule {
     const form = event.target;
     
     const perfisSelecionados = Array.from(form.querySelectorAll('input[name="perfis"]:checked')).map(cb => cb.value);
-    const unidadesSelecionadas = Array.from(form.unidades.selectedOptions).map(opt => opt.value).filter(v => v);
+    const unidadesSelecionadas = Array.from(form.querySelectorAll('input[name="unidades"]:checked')).map(cb => cb.value);
 
     if (perfisSelecionados.length === 0) {
       alert('❌ Selecione pelo menos um perfil');
@@ -232,10 +238,16 @@ class UsuariosModule {
       return;
     }
 
-    // Agora usa 'this.unidades' que foi carregado no 'load()'
-    const unidadesOptions = this.unidades.map(u => {
-      const selecionado = usuario.unidades?.some(un => un.unidade_id === u.id);
-      return `<option value="${u.id}" ${selecionado ? 'selected' : ''}>${u.nome}</option>`;
+    const unidadesDoUsuario = usuario.unidades || [];
+    const todasSelecionadas = this.unidades.length > 0 && this.unidades.every(u => unidadesDoUsuario.some(un => un.unidade_id === u.id));
+    const unidadesCheckboxes = this.unidades.map(u => {
+      const selecionado = unidadesDoUsuario.some(un => un.unidade_id === u.id);
+      return `
+        <label style="display: flex; align-items: center; gap: 0.5rem; padding: 0.5rem 1rem; background: var(--bg-secondary); border-radius: var(--border-radius); cursor: pointer;">
+          <input type="checkbox" name="unidades" value="${u.id}" class="unidade-cb" ${selecionado ? 'checked' : ''}>
+          <span style="font-weight: 600;">${u.nome}</span>
+        </label>
+      `;
     }).join('');
 
     const perfisCheckboxes = Object.entries(CONFIG.PERFIS_LABELS)
@@ -274,14 +286,18 @@ class UsuariosModule {
           </div>
         </div>
 
-        ${modal.formGroup('Unidades de Acesso', `
-          <select name="unidades" class="form-input" multiple size="4" style="height: auto;">
-            <option value="">Todas as unidades</option>
-            ${unidadesOptions}
-          </select>
-          <small style="color: var(--text-muted);">Segure Ctrl para selecionar múltiplas</small>
-        `)}
-        
+        <div class="form-group">
+          <label class="form-label">Unidades de Acesso</label>
+          <div style="margin-top: 0.5rem; display: flex; flex-direction: column; gap: 0.5rem;">
+            <label style="display: flex; align-items: center; gap: 0.5rem; padding: 0.5rem 1rem; background: var(--primary); color: #fff; border-radius: var(--border-radius); cursor: pointer; font-weight: 700;">
+              <input type="checkbox" id="cb-todas-unidades" ${todasSelecionadas ? 'checked' : ''} onchange="usuariosModule.toggleTodasUnidades(this.checked)">
+              <span>✅ Todas as unidades</span>
+            </label>
+            ${unidadesCheckboxes}
+          </div>
+          <small style="color: var(--text-muted); margin-top: 0.25rem; display: block;">Sem nenhuma selecionada = sem acesso a unidades</small>
+        </div>
+
         ${modal.actions('Cancelar', 'Salvar Alterações')}
       </form>
     `;
@@ -301,7 +317,7 @@ class UsuariosModule {
       perfisSelecionados.push('dev');
     }
 
-    const unidadesSelecionadas = Array.from(form.unidades.selectedOptions).map(opt => opt.value).filter(v => v);
+    const unidadesSelecionadas = Array.from(form.querySelectorAll('input[name="unidades"]:checked')).map(cb => cb.value);
 
     if (perfisSelecionados.length === 0) {
       alert('❌ Selecione pelo menos um perfil');
@@ -335,6 +351,10 @@ class UsuariosModule {
     } catch (error) {
       alert('❌ Erro: ' + error.message);
     }
+  }
+
+  toggleTodasUnidades(checked) {
+    document.querySelectorAll('.unidade-cb').forEach(cb => { cb.checked = checked; });
   }
 }
 
