@@ -567,9 +567,21 @@ class CaixaModule {
     for (const item of venda.itens) {
       const produtoFull = this.produtos.find(p => p.id === item.produto_id);
       if (produtoFull && produtoFull.is_combo && produtoFull.itens_combo && produtoFull.itens_combo.length > 0) {
+        let grupoIdx = 0;
         for (const componente of produtoFull.itens_combo) {
-          const qtdTotalComponente = parseFloat(componente.quantidade) * parseFloat(item.quantidade);
-          await this.registrarSaidaEstoque(componente.produto_id, qtdTotalComponente, usuarioId, `Combo Vendido (${produtoFull.nome})`);
+          if (componente.tipo === 'opcao') {
+            // Grupo de opções — usar a escolha do cliente
+            const escolhas = item.escolhas_combo || {};
+            const prodEscolhido = escolhas[grupoIdx];
+            if (prodEscolhido) {
+              const qtdTotal = parseFloat(componente.quantidade) * parseFloat(item.quantidade);
+              await this.registrarSaidaEstoque(prodEscolhido, qtdTotal, usuarioId, `Combo Vendido (${produtoFull.nome})`);
+            }
+            grupoIdx++;
+          } else {
+            const qtdTotalComponente = parseFloat(componente.quantidade) * parseFloat(item.quantidade);
+            await this.registrarSaidaEstoque(componente.produto_id, qtdTotalComponente, usuarioId, `Combo Vendido (${produtoFull.nome})`);
+          }
         }
       } else {
         await this.registrarSaidaEstoque(item.produto_id, parseFloat(item.quantidade), usuarioId, `Venda ${venda.tipo === 'balcao' ? 'Balcão' : 'Mesa'}`);
@@ -887,9 +899,94 @@ class CaixaModule {
     }
   }
 
+  _comboTemOpcoes(produto) {
+    return produto.is_combo && produto.itens_combo && produto.itens_combo.some(i => i.tipo === 'opcao');
+  }
+
+  abrirModalComboOpcoesBalcao(produto) {
+    const gruposOpcoes = produto.itens_combo.filter(i => i.tipo === 'opcao');
+    const fixos = produto.itens_combo.filter(i => i.tipo !== 'opcao');
+
+    const fixosHtml = fixos.map(item => {
+      const p = this.produtos.find(x => x.id === item.produto_id);
+      return p ? `<div style="font-size: 0.85rem; padding: 3px 0;">✅ ${item.quantidade}x ${p.nome}</div>` : '';
+    }).join('');
+
+    const gruposHtml = gruposOpcoes.map((grupo, idx) => {
+      const opcoesHtml = grupo.opcoes.map(opId => {
+        const p = this.produtos.find(x => x.id === opId);
+        return p ? `
+          <label style="display: flex; align-items: center; gap: 0.5rem; padding: 0.6rem 1rem; background: var(--bg-secondary); border-radius: var(--border-radius); cursor: pointer; border: 2px solid transparent; transition: all 0.2s;"
+            onclick="this.parentElement.querySelectorAll('label').forEach(l=>l.style.borderColor='transparent'); this.style.borderColor='var(--primary)';">
+            <input type="radio" name="opcao_balcao_${idx}" value="${p.id}" required style="width: 18px; height: 18px;">
+            <span style="font-weight: 600;">${p.nome}</span>
+            <span style="margin-left: auto; color: var(--text-muted); font-size: 0.8rem;">R$ ${parseFloat(p.preco_base).toFixed(2)}</span>
+          </label>
+        ` : '';
+      }).join('');
+
+      return `
+        <div style="margin-bottom: 1rem;">
+          <label style="font-size: 0.85rem; font-weight: 700; color: var(--info); display: block; margin-bottom: 0.5rem;">
+            🔄 Escolha ${grupo.quantidade} opção:
+          </label>
+          <div style="display: flex; flex-direction: column; gap: 0.35rem;">${opcoesHtml}</div>
+        </div>
+      `;
+    }).join('');
+
+    const html = `
+      <div id="modal-combo-secundario" style="position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.8); z-index: 3000; display: flex; align-items: center; justify-content: center; padding: 1rem;">
+        <div class="card" style="width: 100%; max-width: 450px; max-height: 90vh; overflow-y: auto; animation: modalSlideIn 0.2s ease;">
+          <div class="card-header">
+            <h3 class="card-title">📦 ${produto.nome}</h3>
+            <button class="btn btn-ghost btn-sm" onclick="document.getElementById('modal-combo-secundario').remove()">✕</button>
+          </div>
+          <div style="text-align: center; margin-bottom: 1rem;">
+            <div style="font-size: 1.1rem; font-weight: 800; color: var(--primary);">R$ ${parseFloat(produto.preco_venda).toFixed(2)}</div>
+          </div>
+          <form onsubmit="caixaModule.confirmarComboOpcoesBalcao(event, '${produto.id}')">
+            ${fixosHtml ? `<div style="margin-bottom: 1rem; padding: 0.75rem; background: var(--bg-secondary); border-radius: var(--border-radius);"><div style="font-size: 0.8rem; font-weight: 700; color: var(--text-secondary); margin-bottom: 0.25rem;">ITENS INCLUSOS:</div>${fixosHtml}</div>` : ''}
+            ${gruposHtml}
+            <div style="display: flex; gap: 0.5rem; margin-top: 1rem; border-top: 1px solid var(--border-color); padding-top: 0.75rem;">
+              <button type="button" class="btn btn-secondary" style="flex: 1;" onclick="document.getElementById('modal-combo-secundario').remove()">Cancelar</button>
+              <button type="submit" class="btn btn-primary" style="flex: 1;">Adicionar</button>
+            </div>
+          </form>
+        </div>
+      </div>
+    `;
+    document.body.insertAdjacentHTML('beforeend', html);
+  }
+
+  confirmarComboOpcoesBalcao(event, produtoId) {
+    event.preventDefault();
+    const produto = this.produtos.find(p => p.id === produtoId);
+    if (!produto) return;
+
+    const gruposOpcoes = produto.itens_combo.filter(i => i.tipo === 'opcao');
+    const escolhas = {};
+    for (let idx = 0; idx < gruposOpcoes.length; idx++) {
+      const radio = event.target.querySelector(`input[name="opcao_balcao_${idx}"]:checked`);
+      if (!radio) { alert('⚠️ Selecione todas as opções.'); return; }
+      escolhas[idx] = radio.value;
+    }
+
+    this.carrinhoBalcao.push({ p: produto, qtd: 1, escolhas_combo: escolhas });
+    this.atualizarCarrinhoBalcao();
+    document.getElementById('modal-combo-secundario').remove();
+  }
+
   addCarrinhoBalcao(id) {
     const p = this.produtos.find(x => x.id === id);
     if (!p) return;
+
+    // Combo com opções → modal de escolha
+    if (this._comboTemOpcoes(p)) {
+      this.abrirModalComboOpcoesBalcao(p);
+      return;
+    }
+
     if (p.tipo_preco === 'peso') {
       this.abrirModalPesoBalcao(p.id);
     } else {
@@ -936,7 +1033,8 @@ class CaixaModule {
     try {
       const [novaVenda] = await db.insert('vendas', [{ unidade_id: this.unidadeAtual, tipo: 'balcao', identificador: 'Balcão', status: 'aberta', total: total, usuario_abertura_id: uId }]);
       await db.insert('venda_itens', this.carrinhoBalcao.map(i => ({
-        venda_id: novaVenda.id, produto_id: i.p.id, quantidade: i.qtd, preco_unitario: i.p.preco_venda, subtotal: i.qtd * i.p.preco_venda, usuario_id: uId
+        venda_id: novaVenda.id, produto_id: i.p.id, quantidade: i.qtd, preco_unitario: i.p.preco_venda, subtotal: i.qtd * i.p.preco_venda, usuario_id: uId,
+        escolhas_combo: i.escolhas_combo || null
       })));
       
       modal.close();

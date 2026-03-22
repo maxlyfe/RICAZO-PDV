@@ -378,9 +378,99 @@ class PdvModule {
     input.focus();
   }
 
+  _comboTemOpcoes(produto) {
+    return produto.is_combo && produto.itens_combo && produto.itens_combo.some(i => i.tipo === 'opcao');
+  }
+
+  abrirModalComboOpcoes(produto) {
+    const gruposOpcoes = produto.itens_combo.filter(i => i.tipo === 'opcao');
+    const fixos = produto.itens_combo.filter(i => i.tipo !== 'opcao');
+
+    const fixosHtml = fixos.map(item => {
+      const p = this.produtos.find(x => x.id === item.produto_id);
+      return p ? `<div style="font-size: 0.85rem; padding: 3px 0;">✅ ${item.quantidade}x ${p.nome}</div>` : '';
+    }).join('');
+
+    const gruposHtml = gruposOpcoes.map((grupo, idx) => {
+      const opcoesHtml = grupo.opcoes.map(opId => {
+        const p = this.produtos.find(x => x.id === opId);
+        return p ? `
+          <label style="display: flex; align-items: center; gap: 0.5rem; padding: 0.6rem 1rem; background: var(--bg-secondary); border-radius: var(--border-radius); cursor: pointer; border: 2px solid transparent; transition: all 0.2s;"
+            onclick="this.parentElement.querySelectorAll('label').forEach(l=>l.style.borderColor='transparent'); this.style.borderColor='var(--primary)';">
+            <input type="radio" name="opcao_grupo_${idx}" value="${p.id}" required style="width: 18px; height: 18px;">
+            <span style="font-weight: 600;">${p.nome}</span>
+            <span style="margin-left: auto; color: var(--text-muted); font-size: 0.8rem;">R$ ${parseFloat(p.preco_base).toFixed(2)}</span>
+          </label>
+        ` : '';
+      }).join('');
+
+      return `
+        <div style="margin-bottom: 1rem;">
+          <label style="font-size: 0.85rem; font-weight: 700; color: var(--info); display: block; margin-bottom: 0.5rem;">
+            🔄 Escolha ${grupo.quantidade} opção${grupo.quantidade > 1 ? ' (cada)' : ''}:
+          </label>
+          <div style="display: flex; flex-direction: column; gap: 0.35rem;">
+            ${opcoesHtml}
+          </div>
+        </div>
+      `;
+    }).join('');
+
+    const content = `
+      <div class="card-header">
+        <h3 class="card-title">📦 ${produto.nome}</h3>
+        <button class="btn btn-ghost btn-sm" onclick="modal.close()">✕</button>
+      </div>
+      <div style="text-align: center; margin-bottom: 1rem;">
+        <div style="font-size: 1.1rem; font-weight: 800; color: var(--primary);">R$ ${parseFloat(produto.preco_venda).toFixed(2)}</div>
+      </div>
+      <form onsubmit="pdvModule.confirmarComboOpcoes(event, '${produto.id}')">
+        ${fixosHtml ? `<div style="margin-bottom: 1rem; padding: 0.75rem; background: var(--bg-secondary); border-radius: var(--border-radius);"><div style="font-size: 0.8rem; font-weight: 700; color: var(--text-secondary); margin-bottom: 0.25rem;">ITENS INCLUSOS:</div>${fixosHtml}</div>` : ''}
+        ${gruposHtml}
+        <div class="modal-actions" style="display: flex; gap: 0.5rem; margin-top: 1rem; border-top: 1px solid var(--border-color); padding-top: 0.75rem;">
+          <button type="button" class="btn btn-secondary" style="flex: 1;" onclick="modal.close()">Cancelar</button>
+          <button type="submit" class="btn btn-primary" style="flex: 1;">Adicionar ao Pedido</button>
+        </div>
+      </form>
+    `;
+    modal.open(content);
+  }
+
+  confirmarComboOpcoes(event, produtoId) {
+    event.preventDefault();
+    const produto = this.produtos.find(p => p.id === produtoId);
+    if (!produto) return;
+
+    const gruposOpcoes = produto.itens_combo.filter(i => i.tipo === 'opcao');
+    const escolhas = {};
+    for (let idx = 0; idx < gruposOpcoes.length; idx++) {
+      const radio = event.target.querySelector(`input[name="opcao_grupo_${idx}"]:checked`);
+      if (!radio) { alert('⚠️ Selecione todas as opções.'); return; }
+      escolhas[idx] = radio.value;
+    }
+
+    // Cria item do carrinho com as escolhas
+    const itemId = Date.now().toString();
+    this.carrinho.push({
+      id: itemId,
+      produto: produto,
+      quantidade: 1,
+      preco_unitario: produto.preco_venda,
+      escolhas_combo: escolhas
+    });
+    modal.close();
+    this.atualizarUI();
+  }
+
   adicionarAoCarrinho(produtoId) {
     const produto = this.produtos.find(p => p.id === produtoId);
     if (!produto) return;
+
+    // Combo com opções → abre modal de escolha
+    if (this._comboTemOpcoes(produto)) {
+      this.abrirModalComboOpcoes(produto);
+      return;
+    }
 
     if (produto.tipo_preco === 'peso') {
       const content = `
@@ -521,7 +611,8 @@ class PdvModule {
         quantidade: item.quantidade,
         preco_unitario: item.preco_unitario,
         subtotal: item.quantidade * item.preco_unitario,
-        usuario_id: usuarioId
+        usuario_id: usuarioId,
+        escolhas_combo: item.escolhas_combo || null
       })));
 
       this.carrinho = [];

@@ -7,8 +7,9 @@ class ProdutosModule {
     this.produtos = [];
     this.editingId = null;
     this.isComboMode = false;
-    this.comboItems = []; 
-    this.termoBusca = ''; // Guarda o texto da pesquisa
+    this.comboItems = [];
+    this.opcoesTemp = []; // Opções sendo montadas para um grupo
+    this.termoBusca = '';
   }
 
   // NOVO: Função de Mestre para remover acentos (Normalização NFD)
@@ -164,7 +165,8 @@ class ProdutosModule {
     }
 
     this.isComboMode = p.is_combo;
-    this.comboItems = p.itens_combo ? [...p.itens_combo] : [];
+    this.comboItems = p.itens_combo ? JSON.parse(JSON.stringify(p.itens_combo)) : [];
+    this.opcoesTemp = [];
 
     const opcoesProdutos = this.produtos
       .filter(prod => !prod.is_combo && !prod.excluido)
@@ -232,18 +234,38 @@ class ProdutosModule {
           <div style="border: 2px dashed var(--primary); padding: 1.5rem; border-radius: var(--border-radius); background: rgba(232, 145, 58, 0.05); margin-top: 0.5rem; margin-bottom: 1.5rem;">
             <h4 style="margin-top: 0; color: var(--primary); display: flex; align-items: center; gap: 0.5rem;">📋 Itens que compõem o Combo</h4>
             
-            <div style="display: flex; gap: 0.5rem; margin-bottom: 1rem; align-items: flex-end; flex-wrap: wrap;">
+            <div style="display: flex; gap: 0.5rem; margin-bottom: 0.75rem; align-items: flex-end; flex-wrap: wrap;">
               <div style="flex: 1; min-width: 200px;">
                 <label style="font-size: 0.75rem; color: var(--text-secondary);">Produto</label>
                 <select id="combo-select-produto" class="form-input" onchange="produtosModule.atualizarInputQtdCombo()">
                   ${opcoesProdutos}
                 </select>
               </div>
-              <div style="width: 100px;">
-                <label style="font-size: 0.75rem; color: var(--text-secondary);">Qtd/Peso</label>
+              <div style="width: 80px;">
+                <label style="font-size: 0.75rem; color: var(--text-secondary);">Qtd</label>
                 <input type="number" id="combo-input-qtd" class="form-input" value="1" min="0.001" step="1" placeholder="1">
               </div>
-              <button type="button" class="btn btn-primary" onclick="produtosModule.adicionarItemCombo()" style="height: 42px;">Add</button>
+              <button type="button" class="btn btn-primary" onclick="produtosModule.adicionarItemCombo()" style="height: 42px;" title="Item fixo">+ Fixo</button>
+            </div>
+
+            <div style="background: rgba(23,162,184,0.08); border: 1px dashed var(--info); border-radius: var(--border-radius); padding: 0.75rem; margin-bottom: 1rem;">
+              <label style="font-size: 0.75rem; color: var(--info); font-weight: 700; display: block; margin-bottom: 0.5rem;">🔄 Grupo de Opções (cliente escolhe 1)</label>
+              <div style="display: flex; gap: 0.5rem; align-items: flex-end; flex-wrap: wrap;">
+                <div style="flex: 1; min-width: 200px;">
+                  <select id="combo-select-opcao" class="form-input">
+                    ${opcoesProdutos}
+                  </select>
+                </div>
+                <button type="button" class="btn btn-sm" style="background: var(--info); color: #fff; height: 42px;" onclick="produtosModule.addOpcaoAoGrupo()">+ Opção</button>
+              </div>
+              <div id="combo-opcoes-temp" style="margin-top: 0.5rem;"></div>
+              <div style="display: flex; gap: 0.5rem; margin-top: 0.5rem; align-items: center;">
+                <div style="width: 80px;">
+                  <label style="font-size: 0.7rem; color: var(--text-secondary);">Qtd</label>
+                  <input type="number" id="combo-opcao-qtd" class="form-input" value="1" min="1" step="1" style="font-size: 0.85rem;">
+                </div>
+                <button type="button" class="btn btn-sm" style="background: var(--info); color: #fff;" onclick="produtosModule.confirmarGrupoOpcoes()">Criar Grupo ✓</button>
+              </div>
             </div>
 
             <div id="combo-items-list" style="margin-bottom: 1rem;"></div>
@@ -340,6 +362,53 @@ class ProdutosModule {
     this.renderListaCombo();
   }
 
+  // === GRUPOS DE OPÇÕES (multi-escolha) ===
+
+  addOpcaoAoGrupo() {
+    const select = document.getElementById('combo-select-opcao');
+    const prodId = select.value;
+    if (!prodId || this.opcoesTemp.includes(prodId)) return;
+    this.opcoesTemp.push(prodId);
+    this.renderOpcoesTemp();
+  }
+
+  removerOpcaoTemp(idx) {
+    this.opcoesTemp.splice(idx, 1);
+    this.renderOpcoesTemp();
+  }
+
+  renderOpcoesTemp() {
+    const container = document.getElementById('combo-opcoes-temp');
+    if (!container) return;
+    if (this.opcoesTemp.length === 0) {
+      container.innerHTML = '<div style="font-size: 0.8rem; color: var(--text-muted);">Adicione 2+ produtos como opções.</div>';
+      return;
+    }
+    container.innerHTML = this.opcoesTemp.map((id, idx) => {
+      const p = this.produtos.find(x => x.id === id);
+      return `<span style="display: inline-flex; align-items: center; gap: 4px; background: var(--bg-primary); border: 1px solid var(--info); color: var(--text-primary); padding: 3px 8px; border-radius: 12px; font-size: 0.8rem; margin: 2px;">
+        ${p ? p.nome : '?'}
+        <button type="button" style="border: none; background: none; color: var(--danger); cursor: pointer; font-size: 0.9rem; padding: 0;" onclick="produtosModule.removerOpcaoTemp(${idx})">✕</button>
+      </span>`;
+    }).join('');
+  }
+
+  confirmarGrupoOpcoes() {
+    if (this.opcoesTemp.length < 2) {
+      alert('⚠️ Um grupo de opções precisa de pelo menos 2 produtos.');
+      return;
+    }
+    const qtd = parseInt(document.getElementById('combo-opcao-qtd')?.value) || 1;
+    this.comboItems.push({
+      tipo: 'opcao',
+      quantidade: qtd,
+      opcoes: [...this.opcoesTemp]
+    });
+    this.opcoesTemp = [];
+    this.renderOpcoesTemp();
+    this.renderListaCombo();
+  }
+
   renderListaCombo() {
     const listContainer = document.getElementById('combo-items-list');
     const totalsContainer = document.getElementById('combo-totals');
@@ -347,9 +416,37 @@ class ProdutosModule {
 
     let valorRealItens = 0;
     let listaHtml = this.comboItems.map((item, idx) => {
+      // Grupo de opções
+      if (item.tipo === 'opcao') {
+        const nomesOpcoes = item.opcoes.map(opId => {
+          const p = this.produtos.find(x => x.id === opId);
+          return p ? p.nome : '?';
+        });
+        // Usa o preço médio das opções para estimar
+        const precos = item.opcoes.map(opId => {
+          const p = this.produtos.find(x => x.id === opId);
+          return p ? parseFloat(p.preco_base) : 0;
+        });
+        const precoMedio = precos.length > 0 ? precos.reduce((a, b) => a + b, 0) / precos.length : 0;
+        valorRealItens += precoMedio * item.quantidade;
+
+        return `
+          <div style="background: rgba(23,162,184,0.08); border: 2px solid var(--info); border-radius: 6px; padding: 0.5rem 1rem; margin-bottom: 0.35rem;">
+            <div style="display: flex; justify-content: space-between; align-items: center;">
+              <span style="font-size: 0.85rem; font-weight: 700; color: var(--info);">🔄 ${item.quantidade}x — Cliente escolhe 1:</span>
+              <button type="button" class="btn-ghost" style="color: var(--danger); padding: 0; min-width: auto;" onclick="produtosModule.removerItemCombo(${idx})">✕</button>
+            </div>
+            <div style="margin-top: 4px; font-size: 0.85rem; color: var(--text-primary);">
+              ${nomesOpcoes.map(n => `<span style="display: inline-block; background: var(--bg-primary); border: 1px solid var(--border-color); padding: 2px 8px; border-radius: 12px; margin: 2px; font-size: 0.8rem;">${n}</span>`).join(' ')}
+            </div>
+          </div>
+        `;
+      }
+
+      // Item fixo (original)
       const prodOriginal = this.produtos.find(p => p.id === item.produto_id);
       if (!prodOriginal) return '';
-      
+
       const subtotal = parseFloat(prodOriginal.preco_base) * item.quantidade;
       valorRealItens += subtotal;
       const isPeso = prodOriginal.tipo_preco === 'peso';
@@ -376,7 +473,7 @@ class ProdutosModule {
     totalsContainer.innerHTML = `
       <div style="display: flex; justify-content: space-between; margin-bottom: 0.25rem;">
         <span>Soma dos Itens Avulsos:</span>
-        <strong>R$ ${valorRealItens.toFixed(2)}</strong>
+        <strong>~ R$ ${valorRealItens.toFixed(2)}</strong>
       </div>
       <div style="display: flex; justify-content: space-between; color: ${desconto > 0 ? 'var(--success)' : (desconto < 0 ? 'var(--danger)' : 'var(--text-muted)')}; font-weight: bold; font-size: 1rem;">
         <span>${desconto < 0 ? 'Acréscimo no Combo:' : 'Desconto Oferecido:'}</span>
