@@ -1,14 +1,28 @@
 @echo off
-:: ===========================================
-:: RicaZo PDV - Atalho para Impressão Direta
-:: ===========================================
-:: Abre o Chrome com --kiosk-printing que envia
-:: a impressão DIRETO para a impressora padrão
-:: sem abrir o diálogo de escolha.
+:: ==========================================================
+:: RicaZo PDV - Impressao Direta (Sem Dialogo do Chrome)
+:: ==========================================================
+:: Abre o Chrome com perfil DEDICADO + --kiosk-printing
+:: Assim a impressao vai DIRETO para a impressora padrao
+:: SEM abrir o dialogo de "Escolher impressora".
 ::
-:: IMPORTANTE: Feche TODAS as janelas do Chrome
-:: antes de executar este atalho, senão a flag
-:: não será aplicada.
-:: ===========================================
+:: VANTAGEM: Usa um perfil separado do Chrome normal,
+:: entao voce pode ter outras janelas do Chrome abertas
+:: sem interferir. Funciona sempre!
+::
+:: Na PRIMEIRA vez: o Chrome vai abrir "limpo" (sem login).
+:: Faca login no RicaZo normalmente. A partir dai o perfil
+:: fica salvo e da proxima vez ja abre logado.
+:: ==========================================================
 
-start "" "C:\Program Files\Google\Chrome\Application\chrome.exe" --kiosk-printing "https://ricazo.netlify.app"
+:: Cria pasta do perfil se nao existir
+if not exist "%LOCALAPPDATA%\RicaZo-PDV" mkdir "%LOCALAPPDATA%\RicaZo-PDV"
+
+:: Abre Chrome com perfil isolado + impressao direta
+start "" "C:\Program Files\Google\Chrome\Application\chrome.exe" ^
+  --user-data-dir="%LOCALAPPDATA%\RicaZo-PDV" ^
+  --kiosk-printing ^
+  --disable-popup-blocking ^
+  --no-first-run ^
+  --no-default-browser-check ^
+  "https://ricazo.netlify.app"

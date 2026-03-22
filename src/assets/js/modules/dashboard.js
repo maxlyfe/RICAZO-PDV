@@ -821,26 +821,7 @@ class DashboardModule {
       </div>
     `;
 
-    // Tenta impressão direta USB, senão usa HTML fallback
-    if (typeof printer !== 'undefined' && printer.connected) {
-      const formasEntries = Object.entries(turno.detalhes_pagamentos || {});
-      printer.printRelatorioZ({
-        loja: nomeUnidade,
-        inicio, fim,
-        opAbertura: operadorAbertura,
-        opFecho: operadorFecho,
-        fundo: parseFloat(turno.fundo_caixa).toFixed(2),
-        formas: formasEntries.map(([f, v]) => [f, parseFloat(v).toFixed(2)]),
-        totalGeral: parseFloat(turno.total_vendas).toFixed(2),
-        dinheiroEsperado: parseFloat(turno.total_dinheiro_sistema).toFixed(2),
-        dinheiroDeclarado: parseFloat(turno.total_dinheiro_informado).toFixed(2),
-        diferenca: parseFloat(turno.diferenca_caixa).toFixed(2)
-      }).then(ok => {
-        if (!ok) this._printHtmlFallback(html);
-      });
-    } else {
-      this._printHtmlFallback(html);
-    }
+    this._printHtmlFallback(html);
   }
 
   _printHtmlFallback(html) {

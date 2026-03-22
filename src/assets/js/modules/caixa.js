@@ -313,9 +313,6 @@ class CaixaModule {
           Turno Aberto (R$ ${parseFloat(this.turnoAtual.fundo_caixa).toFixed(2)})
         </div>
         <div style="display: flex; gap: 0.35rem; flex-wrap: wrap;">
-          <button class="btn btn-sm ${typeof printer !== 'undefined' && printer.connected ? 'btn-success' : 'btn-secondary'}" onclick="caixaModule.conectarImpressora()" title="${typeof printer !== 'undefined' && printer.connected ? 'Impressora conectada!' : 'Conectar impressora USB para impressão direta'}">
-            🖨️ ${typeof printer !== 'undefined' && printer.connected ? '✓' : ''}
-          </button>
           <button class="btn btn-sm btn-secondary" onclick="caixaModule.abrirHistoricoTurno()">
             🧾 Histórico
           </button>
@@ -946,20 +943,6 @@ class CaixaModule {
   // Prioridade: 1) USB Direto (ESC/POS) → 2) HTML fallback (window.print)
   // ==========================================
 
-  /** Conectar impressora USB (chamado pelo botão na UI) */
-  async conectarImpressora() {
-    if (typeof printer === 'undefined') {
-      alert('⚠️ Módulo de impressão não carregado.');
-      return;
-    }
-    const ok = await printer.connect();
-    if (ok) {
-      alert('✅ Impressora conectada: ' + (printer.device?.productName || 'USB'));
-    } else {
-      alert('⚠️ Nenhuma impressora selecionada. A impressão continuará pelo Chrome.');
-    }
-  }
-
   /** Fallback HTML: usa print-section + window.print() (abre diálogo do Chrome) */
   _imprimirFallback(conteudoHtml) {
     let printDiv = document.getElementById('print-section');
@@ -968,41 +951,13 @@ class CaixaModule {
     setTimeout(() => window.print(), 150);
   }
 
-  async imprimirTicket(venda, pagamentos, trocoTotal, subtotal, taxaValor, taxaPercent, isReimpressao = false) {
+  imprimirTicket(venda, pagamentos, trocoTotal, subtotal, taxaValor, taxaPercent, isReimpressao = false) {
     const unidade = auth.getUnidadeAtual();
     const dataHora = venda.data_fechamento ? new Date(venda.data_fechamento).toLocaleString('pt-BR') : new Date().toLocaleString('pt-BR');
     const atendente = auth.getCurrentUser()?.nome || 'Operador';
     const mesa = this.mesas.find(m => m.id === venda.mesa_id);
     const identificador = venda.tipo === 'balcao' ? 'BALCÃO' : `MESA ${mesa ? mesa.numero : venda.identificador}`;
-    const tituloDoc = isReimpressao ? '*** REIMPRESSAO ***' : (CONFIG.APP_NAME || 'RicaZo').toUpperCase();
 
-    // ── TENTATIVA 1: Impressão direta via USB (ESC/POS) ──
-    if (typeof printer !== 'undefined' && printer.connected) {
-      const ok = await printer.printTicket({
-        titulo: tituloDoc,
-        loja: unidade.nome,
-        endereco: unidade.endereco || '',
-        data: dataHora,
-        caixa: atendente,
-        pedido: `#${venda.id.substring(0,8).toUpperCase()}`,
-        identificador: identificador,
-        itens: venda.itens.map(i => ({
-          qtd: i.quantidade,
-          nome: i.produto?.nome || '-',
-          total: parseFloat(i.subtotal).toFixed(2)
-        })),
-        subtotal: subtotal.toFixed(2),
-        taxaPercent: taxaPercent,
-        taxaValor: taxaValor.toFixed(2),
-        total: (subtotal + taxaValor).toFixed(2),
-        pagamentos: pagamentos.map(p => ({ nome: p.forma_nome, valor: p.valor.toFixed(2) })),
-        troco: trocoTotal.toFixed(2)
-      });
-      if (ok) return; // Impresso com sucesso via USB!
-      console.warn('🖨️ USB falhou, usando fallback HTML...');
-    }
-
-    // ── TENTATIVA 2: Fallback HTML (window.print) ──
     const html = `
       <div class="ticket-header">
         <div class="ticket-title">${isReimpressao ? '*** REIMPRESSÃO ***' : (CONFIG.APP_NAME || 'RicaZo')}</div>
@@ -1036,37 +991,14 @@ class CaixaModule {
     this._imprimirFallback(html);
   }
 
-  async imprimirRelatorioZ(turno, totalTaxasRecolhidas) {
+  imprimirRelatorioZ(turno, totalTaxasRecolhidas) {
     const unidade = auth.getUnidadeAtual();
     const inicio = new Date(turno.data_abertura).toLocaleString('pt-BR');
     const fim = new Date(turno.data_fechamento).toLocaleString('pt-BR');
     const operadorAbertura = this.usuarios[turno.usuario_abertura_id] || 'N/A';
     const operadorFecho = this.usuarios[turno.usuario_fechamento_id] || 'N/A';
-    const formasEntries = Object.entries(turno.detalhes_pagamentos);
 
-    // ── TENTATIVA 1: Impressão direta via USB (ESC/POS) ──
-    if (typeof printer !== 'undefined' && printer.connected) {
-      const ok = await printer.printRelatorioZ({
-        loja: unidade.nome,
-        inicio: inicio,
-        fim: fim,
-        opAbertura: operadorAbertura,
-        opFecho: operadorFecho,
-        fundo: parseFloat(turno.fundo_caixa).toFixed(2),
-        formas: formasEntries.map(([f, v]) => [f, parseFloat(v).toFixed(2)]),
-        totalProdutos: (parseFloat(turno.total_vendas) - totalTaxasRecolhidas).toFixed(2),
-        totalTaxas: parseFloat(totalTaxasRecolhidas).toFixed(2),
-        totalGeral: parseFloat(turno.total_vendas).toFixed(2),
-        dinheiroEsperado: parseFloat(turno.total_dinheiro_sistema).toFixed(2),
-        dinheiroDeclarado: parseFloat(turno.total_dinheiro_informado).toFixed(2),
-        diferenca: parseFloat(turno.diferenca_caixa).toFixed(2)
-      });
-      if (ok) return;
-      console.warn('🖨️ USB falhou, usando fallback HTML...');
-    }
-
-    // ── TENTATIVA 2: Fallback HTML ──
-    const formasHtml = formasEntries.map(([forma, valor]) => `
+    const formasHtml = Object.entries(turno.detalhes_pagamentos).map(([forma, valor]) => `
       <tr><td>${forma.toUpperCase()}:</td><td>R$ ${parseFloat(valor).toFixed(2)}</td></tr>
     `).join('');
 
