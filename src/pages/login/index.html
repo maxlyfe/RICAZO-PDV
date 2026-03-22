@@ -38,6 +38,9 @@
         <div class="login-footer">
           <p>Versão 1.0.0 | Sistema de Padarias</p>
           <p style="margin-top: 0.5rem; font-size: 0.75rem;">Suporte: dev@ricazo.com</p>
+          <button id="btn-instalar-pdv" onclick="instalarAtalhoPDV()" style="margin-top: 0.75rem; background: var(--bg-tertiary); color: var(--text-secondary); border: 1px solid var(--border-color); padding: 0.4rem 1rem; border-radius: var(--border-radius); cursor: pointer; font-size: 0.75rem; transition: var(--transition);" title="Cria atalho para impressão direta (sem diálogo)">
+            🖨️ Instalar Atalho PDV (Impressão Direta)
+          </button>
         </div>
       </div>
     </div>
@@ -101,6 +104,67 @@
         btnSpinner.classList.add('hidden');
       }
     });
+
+    // Instalar atalho PDV (.bat para impressão direta)
+    function instalarAtalhoPDV() {
+      const batContent = [
+        '@echo off',
+        ':: ==========================================================',
+        ':: RicaZo PDV - Impressao Direta (Sem Dialogo do Chrome)',
+        ':: ==========================================================',
+        ':: Abre Chrome com perfil DEDICADO + --kiosk-printing',
+        ':: A impressao vai DIRETO para a impressora padrao.',
+        ':: Na PRIMEIRA vez faca login normalmente.',
+        ':: ==========================================================',
+        '',
+        ':: Cria pasta do perfil se nao existir',
+        'if not exist "%LOCALAPPDATA%\\RicaZo-PDV" mkdir "%LOCALAPPDATA%\\RicaZo-PDV"',
+        '',
+        ':: Tenta Chrome em Program Files',
+        'if exist "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe" (',
+        '  start "" "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe" ^',
+        '    --user-data-dir="%LOCALAPPDATA%\\RicaZo-PDV" ^',
+        '    --kiosk-printing ^',
+        '    --disable-popup-blocking ^',
+        '    --no-first-run ^',
+        '    --no-default-browser-check ^',
+        '    "' + window.location.origin + '"',
+        '  exit',
+        ')',
+        '',
+        ':: Tenta Chrome em Program Files (x86)',
+        'if exist "C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe" (',
+        '  start "" "C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe" ^',
+        '    --user-data-dir="%LOCALAPPDATA%\\RicaZo-PDV" ^',
+        '    --kiosk-printing ^',
+        '    --disable-popup-blocking ^',
+        '    --no-first-run ^',
+        '    --no-default-browser-check ^',
+        '    "' + window.location.origin + '"',
+        '  exit',
+        ')',
+        '',
+        'echo Chrome nao encontrado! Instale o Google Chrome.',
+        'pause'
+      ].join('\r\n');
+
+      const blob = new Blob([batContent], { type: 'application/bat' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'RicaZo PDV.bat';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+
+      alert('✅ Arquivo "RicaZo PDV.bat" baixado!\\n\\n' +
+        'Instruções:\\n' +
+        '1. Mova o arquivo para a Área de Trabalho\\n' +
+        '2. Clique duplo para abrir o RicaZo\\n' +
+        '3. Na primeira vez, faça login normalmente\\n' +
+        '4. A impressão irá direto para a impressora padrão!');
+    }
 
     // Previne envio de senha no console
     const originalLog = console.log;

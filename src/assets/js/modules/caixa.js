@@ -24,6 +24,10 @@ class CaixaModule {
     // Variáveis de suporte para o Histórico de Reimpressão
     this.historicoTurnoAtual = [];
     this.historicoPagamentosAtual = {};
+
+    // Impressão Remota: listener para fila de impressão
+    this.printSubscription = null;
+    this.isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
   }
 
   async init() {
@@ -57,7 +61,13 @@ class CaixaModule {
       } else {
         clearInterval(this.interval);
       }
-    }, 10000); 
+    }, 10000);
+
+    // Inicia listener de impressão remota (apenas em PCs)
+    if (!this.isMobile) {
+      this.iniciarListenerImpressao();
+      this._limparFilaImpressaoAntiga();
+    }
   }
 
   // ==========================================
@@ -939,16 +949,112 @@ class CaixaModule {
   }
 
   // ==========================================
-  // FUNÇÕES DE IMPRESSÃO
-  // Prioridade: 1) USB Direto (ESC/POS) → 2) HTML fallback (window.print)
+  // IMPRESSÃO REMOTA (Mobile → PC via Supabase Realtime)
   // ==========================================
 
-  /** Fallback HTML: usa print-section + window.print() (abre diálogo do Chrome) */
-  _imprimirFallback(conteudoHtml) {
+  /**
+   * Inicia listener em tempo real para fila de impressão.
+   * Apenas PCs (com Chrome --kiosk-printing) escutam.
+   */
+  iniciarListenerImpressao() {
+    if (this.printSubscription) {
+      this.printSubscription.unsubscribe();
+    }
+
+    const unidadeId = this.unidadeAtual;
+    if (!unidadeId) return;
+
+    const client = db.getClient();
+    if (!client) return;
+
+    this.printSubscription = client
+      .channel('fila-impressao')
+      .on('postgres_changes', {
+        event: 'INSERT',
+        schema: 'public',
+        table: 'fila_impressao',
+        filter: `unidade_id=eq.${unidadeId}`
+      }, async (payload) => {
+        const job = payload.new;
+        if (job.status !== 'pendente') return;
+
+        // Imprime localmente (chama direto o print, não o wrapper)
+        this._imprimirLocal(job.html);
+
+        // Marca como impresso
+        try {
+          await client.from('fila_impressao')
+            .update({ status: 'impresso', impresso_em: new Date().toISOString() })
+            .eq('id', job.id);
+        } catch (e) {
+          console.warn('Erro ao marcar impressão como concluída:', e);
+        }
+      })
+      .subscribe();
+
+    console.log('🖨️ Listener de impressão remota ativo para esta unidade.');
+  }
+
+  /**
+   * Envia HTML para fila de impressão remota (usado por dispositivos mobile).
+   * O PC da unidade que estiver com o listener ativo irá imprimir.
+   */
+  async _enviarParaFilaImpressao(conteudoHtml) {
+    try {
+      const client = db.getClient();
+      if (!client) throw new Error('Supabase não conectado');
+      const { error } = await client.from('fila_impressao').insert({
+        unidade_id: this.unidadeAtual,
+        html: conteudoHtml,
+        solicitado_por: auth.getCurrentUser()?.id || null,
+        status: 'pendente'
+      });
+      if (error) throw error;
+      return true;
+    } catch (e) {
+      console.error('Erro ao enviar para fila de impressão:', e);
+      return false;
+    }
+  }
+
+  /** Limpa registros de impressão com mais de 24h para não acumular lixo */
+  async _limparFilaImpressaoAntiga() {
+    try {
+      const client = db.getClient();
+      if (!client) return;
+      const ontem = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+      await client.from('fila_impressao').delete().lt('created_at', ontem);
+    } catch (e) { /* silencioso */ }
+  }
+
+  // ==========================================
+  // FUNÇÕES DE IMPRESSÃO
+  // ==========================================
+
+  /** Imprime localmente via window.print() (PC com Chrome --kiosk-printing) */
+  _imprimirLocal(conteudoHtml) {
     let printDiv = document.getElementById('print-section');
     if (!printDiv) { printDiv = document.createElement('div'); printDiv.id = 'print-section'; document.body.appendChild(printDiv); }
     printDiv.innerHTML = conteudoHtml;
     setTimeout(() => window.print(), 150);
+  }
+
+  /**
+   * Impressão inteligente:
+   * - PC: imprime localmente via window.print()
+   * - Mobile: envia para fila remota (PC da unidade imprime)
+   */
+  _imprimirFallback(conteudoHtml) {
+    if (this.isMobile) {
+      this._enviarParaFilaImpressao(conteudoHtml).then(ok => {
+        if (!ok) {
+          alert('❌ Erro ao enviar impressão para o PC. Verifique a conexão.');
+        }
+      });
+      return;
+    }
+
+    this._imprimirLocal(conteudoHtml);
   }
 
   imprimirTicket(venda, pagamentos, trocoTotal, subtotal, taxaValor, taxaPercent, isReimpressao = false) {
