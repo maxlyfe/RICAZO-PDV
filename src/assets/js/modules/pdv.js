@@ -173,6 +173,9 @@ class PdvModule {
     
     const vendaAtual = this.vendasAbertas.find(v => v.mesa_id === this.mesaSelecionada && v.tipo === (isBalcao ? 'balcao' : 'mesa'));
     
+    const totalCarrinho = this.carrinho.reduce((sum, i) => sum + (i.quantidade * i.preco_unitario), 0);
+    const qtdItens = this.carrinho.reduce((sum, i) => sum + i.quantidade, 0);
+
     return `
       <style>
         .pdv-grid-otimizado { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 1rem; padding: 1.5rem; overflow-y: auto; flex: 1; align-content: start; }
@@ -180,6 +183,46 @@ class PdvModule {
         .produto-venda-card-otimizado:hover { border-color: var(--primary); transform: translateY(-4px); box-shadow: var(--shadow-md); }
         .secao-itens-lancados { background: rgba(0,0,0,0.02); padding: 1rem; border-bottom: 2px solid var(--border-color); }
         [data-theme="dark"] .secao-itens-lancados { background: rgba(255,255,255,0.02); }
+
+        /* Botão flutuante Lançar (mobile) */
+        .fab-lancar {
+          display: none;
+          position: fixed;
+          bottom: 20px;
+          right: 20px;
+          z-index: 9999;
+          background: var(--primary);
+          color: #fff;
+          border: none;
+          border-radius: 50px;
+          padding: 14px 22px;
+          font-size: 1rem;
+          font-weight: 800;
+          box-shadow: 0 4px 15px rgba(0,0,0,0.3);
+          cursor: pointer;
+          animation: fab-pulse 2s infinite;
+          gap: 8px;
+          align-items: center;
+        }
+        .fab-lancar .fab-badge {
+          background: #fff;
+          color: var(--primary);
+          border-radius: 50%;
+          width: 24px;
+          height: 24px;
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          font-size: 0.8rem;
+          font-weight: 900;
+        }
+        @keyframes fab-pulse {
+          0%, 100% { box-shadow: 0 4px 15px rgba(0,0,0,0.3); }
+          50% { box-shadow: 0 4px 25px rgba(232,145,58,0.6); }
+        }
+        @media (max-width: 1024px) {
+          .fab-lancar { display: flex; }
+        }
       </style>
       
       <div class="venda-container animate-fade-in" style="height: calc(100vh - 100px);">
@@ -257,6 +300,13 @@ class PdvModule {
           </div>
         </div>
       </div>
+
+      ${this.carrinho.length > 0 ? `
+        <button class="fab-lancar" onclick="pdvModule.enviarPedido()">
+          <span class="fab-badge">${qtdItens}</span>
+          📤 Lançar — R$ ${totalCarrinho.toFixed(2)}
+        </button>
+      ` : ''}
     `;
   }
 

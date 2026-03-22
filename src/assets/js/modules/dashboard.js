@@ -115,7 +115,7 @@ class DashboardModule {
       content.innerHTML = `
         <div class="card-header animate-fade-in" style="justify-content: space-between; display: flex; align-items: center; margin-bottom: 1.5rem;">
           <h3 class="card-title" style="margin: 0;">🏪 Gestão de Lojas e Fábricas</h3>
-          <button class="btn btn-primary" onclick="window.unidadesModule.openModal()">+ Nova Unidade</button>
+          ${auth.isDev() ? '<button class="btn btn-primary" onclick="window.unidadesModule.openModal()">+ Nova Unidade</button>' : ''}
         </div>
         <div id="unidades-list" class="dashboard-grid injected-tab" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 1.5rem;"></div>
       `;
