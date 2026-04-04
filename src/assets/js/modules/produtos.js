@@ -243,7 +243,7 @@ class ProdutosModule {
               </div>
               <div style="width: 80px;">
                 <label style="font-size: 0.75rem; color: var(--text-secondary);">Qtd</label>
-                <input type="number" id="combo-input-qtd" class="form-input" value="1" min="0.001" step="1" placeholder="1">
+                <input type="number" id="combo-input-qtd" class="form-input" value="1" placeholder="1">
               </div>
               <button type="button" class="btn btn-primary" onclick="produtosModule.adicionarItemCombo()" style="height: 42px;" title="Item fixo">+ Fixo</button>
             </div>
@@ -262,7 +262,7 @@ class ProdutosModule {
               <div style="display: flex; gap: 0.5rem; margin-top: 0.5rem; align-items: center;">
                 <div style="width: 80px;">
                   <label style="font-size: 0.7rem; color: var(--text-secondary);">Qtd</label>
-                  <input type="number" id="combo-opcao-qtd" class="form-input" value="1" min="1" step="1" style="font-size: 0.85rem;">
+                  <input type="number" id="combo-opcao-qtd" class="form-input" value="1" style="font-size: 0.85rem;">
                 </div>
                 <button type="button" class="btn btn-sm" style="background: var(--info); color: #fff;" onclick="produtosModule.confirmarGrupoOpcoes()">Criar Grupo ✓</button>
               </div>
@@ -293,7 +293,10 @@ class ProdutosModule {
           </label>
         </div>
 
-        ${modal.actions('Cancelar', 'Salvar Alterações')}
+        <div class="modal-actions" style="display: flex; gap: 1rem; justify-content: flex-end; margin-top: 2rem;">
+          <button type="button" class="btn btn-ghost" onclick="modal.close()">Cancelar</button>
+          <button type="submit" class="btn btn-primary" formnovalidate>Salvar Alterações</button>
+        </div>
       </form>
     `;
     
