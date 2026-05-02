@@ -31,6 +31,7 @@ class DashboardModule {
     };
 
     this.dadosGraficoCompletos = [];
+    this.alertaLimite = [];
   }
 
   async carregarEstatisticas() {
@@ -282,40 +283,62 @@ class DashboardModule {
         container.innerHTML = `<div class="text-center" style="padding: 3rem;"><div class="spinner" style="margin: 0 auto 1rem;"></div><p>A calcular...</p></div>`;
       }
 
+      const LIMITE_POR_UNIDADE = 5000;
       const dataInicioIso = `${this.filtros.dataInicio}T00:00:00.000Z`;
       const dataFimIso = `${this.filtros.dataFim}T23:59:59.999Z`;
-      
+
       const fusoOffset = new Date().getTimezoneOffset() * 60000;
       const hojeStr = new Date(Date.now() - fusoOffset).toISOString().split('T')[0];
 
-      let queryVendas = db.getClient()
-        .from('vendas')
-        .select('id, total, taxa_servico, data_fechamento, tipo, identificador, mesa_id, usuario_fechamento_id, unidade_id, itens:venda_itens(subtotal, usuario_id)')
-        .eq('status', 'fechada')
-        .gte('data_fechamento', dataInicioIso)
-        .lte('data_fechamento', dataFimIso)
-        .order('data_fechamento', { ascending: false });
+      this.alertaLimite = []; // unidades que atingiram o limite
 
-      if (this.filtros.unidadeId !== 'todas') {
-        queryVendas = queryVendas.eq('unidade_id', this.filtros.unidadeId);
+      const buscarVendasUnidade = async (unidadeId) => {
+        const { data } = await db.getClient()
+          .from('vendas')
+          .select('id, total, taxa_servico, data_fechamento, tipo, identificador, mesa_id, usuario_fechamento_id, unidade_id, itens:venda_itens(subtotal, usuario_id)')
+          .eq('status', 'fechada')
+          .eq('unidade_id', unidadeId)
+          .gte('data_fechamento', dataInicioIso)
+          .lte('data_fechamento', dataFimIso)
+          .order('data_fechamento', { ascending: false })
+          .limit(LIMITE_POR_UNIDADE);
+        return data || [];
+      };
+
+      const buscarTurnosUnidade = async (unidadeId) => {
+        const { data } = await db.getClient()
+          .from('caixa_turnos')
+          .select('*')
+          .eq('unidade_id', unidadeId)
+          .gte('data_abertura', dataInicioIso)
+          .lte('data_abertura', dataFimIso)
+          .order('data_abertura', { ascending: false })
+          .limit(LIMITE_POR_UNIDADE);
+        return data || [];
+      };
+
+      let unidadesParaBuscar = [];
+      if (this.filtros.unidadeId === 'todas') {
+        unidadesParaBuscar = this.unidades;
+      } else {
+        const u = this.unidades.find(u => u.id === this.filtros.unidadeId);
+        if (u) unidadesParaBuscar = [u];
       }
 
-      const { data: vendas } = await queryVendas;
-      this.vendasAtuais = vendas || [];
+      const [resultadosVendas, resultadosTurnos] = await Promise.all([
+        Promise.all(unidadesParaBuscar.map(u => buscarVendasUnidade(u.id))),
+        Promise.all(unidadesParaBuscar.map(u => buscarTurnosUnidade(u.id)))
+      ]);
 
-      let queryTurnos = db.getClient()
-        .from('caixa_turnos')
-        .select('*')
-        .gte('data_abertura', dataInicioIso)
-        .lte('data_abertura', dataFimIso)
-        .order('data_abertura', { ascending: false });
+      // detectar unidades que atingiram o limite
+      unidadesParaBuscar.forEach((u, i) => {
+        if (resultadosVendas[i].length === LIMITE_POR_UNIDADE) {
+          this.alertaLimite.push(u.nome);
+        }
+      });
 
-      if (this.filtros.unidadeId !== 'todas') {
-        queryTurnos = queryTurnos.eq('unidade_id', this.filtros.unidadeId);
-      }
-
-      const { data: turnos } = await queryTurnos;
-      this.turnosAtuais = turnos || [];
+      this.vendasAtuais = resultadosVendas.flat();
+      this.turnosAtuais = resultadosTurnos.flat();
 
       let todosPagamentos = [];
       if (this.vendasAtuais.length > 0) {
@@ -446,19 +469,38 @@ class DashboardModule {
     }
   }
 
+  htmlAlertaLimite() {
+    if (!this.alertaLimite || this.alertaLimite.length === 0) return '';
+    const unidades = this.alertaLimite.join(', ');
+    return `
+      <div style="background: rgba(255, 193, 7, 0.12); border: 1px solid #ffc107; border-radius: var(--border-radius); padding: 0.75rem 1.25rem; margin-bottom: 1.25rem; display: flex; align-items: flex-start; gap: 0.75rem;">
+        <span style="font-size: 1.25rem; line-height: 1.4;">⚠️</span>
+        <div>
+          <strong style="color: #856404; font-size: 0.9rem;">Volume elevado de registos</strong>
+          <p style="margin: 0.25rem 0 0 0; font-size: 0.82rem; color: #856404; line-height: 1.5;">
+            A consulta atingiu o limite de 5.000 vendas por unidade em: <strong>${unidades}</strong>.<br>
+            Os dados exibidos podem estar incompletos. Reduza o período de pesquisa para garantir precisão total.
+          </p>
+        </div>
+      </div>
+    `;
+  }
+
   renderDynamicUI_BI() {
     const container = document.getElementById('dashboard-dynamic-content');
     if (!container) return;
 
+    const alerta = this.htmlAlertaLimite();
+
     if (this.telaAtual === 'resumo') {
-      container.innerHTML = this.htmlTelaResumo();
+      container.innerHTML = alerta + this.htmlTelaResumo();
       setTimeout(() => this.renderGrafico(), 50);
     } else if (this.telaAtual === 'auditoria') {
-      container.innerHTML = this.htmlTelaAuditoria();
+      container.innerHTML = alerta + this.htmlTelaAuditoria();
     } else if (this.telaAtual === 'equipe') {
-      container.innerHTML = this.htmlTelaEquipe();
+      container.innerHTML = alerta + this.htmlTelaEquipe();
     } else if (this.telaAtual === 'turnos') {
-      container.innerHTML = this.htmlTelaTurnos(); 
+      container.innerHTML = alerta + this.htmlTelaTurnos();
     }
   }
 
