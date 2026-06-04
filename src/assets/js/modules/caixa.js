@@ -1176,6 +1176,7 @@ class CaixaModule {
         <div class="ticket-title">${CONFIG.APP_NAME || 'RicaZo'}</div>
         <div class="ticket-subtitle">${unidade.nome}</div>
         ${unidade.endereco ? `<div class="ticket-info">${unidade.endereco}</div>` : ''}
+        ${unidade.cnpj ? `<div class="ticket-info">CNPJ: ${unidade.cnpj}</div>` : ''}
       </div>
       <div class="ticket-divider"></div>
 
@@ -1221,6 +1222,7 @@ class CaixaModule {
         <div class="ticket-title">RELATÓRIO Z</div>
         <div class="ticket-subtitle">FECHAMENTO DE CAIXA</div>
         <div class="ticket-info">${unidade.nome}</div>
+        ${unidade.cnpj ? `<div class="ticket-info">CNPJ: ${unidade.cnpj}</div>` : ''}
       </div>
       <div class="ticket-divider"></div>
 

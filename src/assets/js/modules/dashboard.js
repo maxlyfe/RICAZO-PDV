@@ -808,7 +808,9 @@ class DashboardModule {
     const turno = this.turnosAtuais.find(t => t.id === turnoId);
     if (!turno) return;
 
-    const nomeUnidade = this.unidades.find(u => u.id === turno.unidade_id)?.nome || 'Unidade';
+    const unidadeObj = this.unidades.find(u => u.id === turno.unidade_id);
+    const nomeUnidade = unidadeObj?.nome || 'Unidade';
+    const cnpjUnidade = unidadeObj?.cnpj || null;
     const inicio = new Date(turno.data_abertura).toLocaleString('pt-BR');
     const fim = new Date(turno.data_fechamento).toLocaleString('pt-BR');
     const operadorAbertura = this.usuariosMap[turno.usuario_abertura_id] || 'N/A';
@@ -823,6 +825,7 @@ class DashboardModule {
         <div class="ticket-title">RELATÓRIO Z</div>
         <div class="ticket-subtitle">FECHAMENTO (ADMIN)</div>
         <div class="ticket-info">${nomeUnidade}</div>
+        ${cnpjUnidade ? `<div class="ticket-info">CNPJ: ${cnpjUnidade}</div>` : ''}
       </div>
       <div class="ticket-divider"></div>
 

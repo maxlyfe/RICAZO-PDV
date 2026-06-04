@@ -149,10 +149,23 @@ class UnidadesModule {
     }
   }
 
+  formatarCnpj(valor) {
+    // Remove tudo que não é dígito
+    const digits = (valor || '').replace(/\D/g, '');
+    if (!digits) return '';
+    // Aplica máscara XX.XXX.XXX/XXXX-XX
+    return digits
+      .replace(/^(\d{2})(\d)/, '$1.$2')
+      .replace(/^(\d{2})\.(\d{3})(\d)/, '$1.$2.$3')
+      .replace(/\.(\d{3})(\d)/, '.$1/$2')
+      .replace(/(\d{4})(\d)/, '$1-$2')
+      .substring(0, 18);
+  }
+
   openModal(id = null) {
     this.editingId = id;
-    let u = { nome: '', tipo: 'loja', endereco: '' };
-    
+    let u = { nome: '', tipo: 'loja', endereco: '', cnpj: '' };
+
     if (id) {
       const uni = this.unidades.find(x => x.id === id);
       if (uni) u = { ...uni };
@@ -164,7 +177,7 @@ class UnidadesModule {
         <button class="btn btn-ghost btn-sm" onclick="modal.close()">✕</button>
       </div>
       <form onsubmit="unidadesModule.save(event)">
-        
+
         <div class="form-group">
           <label class="form-label">Nome da Unidade *</label>
           <input type="text" name="nome" class="form-input" required value="${u.nome}" placeholder="Ex: RicaZo Centro">
@@ -184,7 +197,14 @@ class UnidadesModule {
           <input type="text" name="endereco" class="form-input" value="${u.endereco || ''}" placeholder="Ex: Rua das Pedras, 10 - Búzios">
           <small style="color: var(--text-muted); margin-top: 0.25rem; display: block;">Esta informação sairá impressa nos talões/recibos.</small>
         </div>
-        
+
+        <div class="form-group">
+          <label class="form-label">CNPJ <span style="color: var(--text-muted); font-weight: 400;">(opcional)</span></label>
+          <input type="text" name="cnpj" class="form-input" value="${u.cnpj || ''}" placeholder="00.000.000/0000-00" maxlength="18"
+            oninput="this.value = unidadesModule.formatarCnpj(this.value)">
+          <small style="color: var(--text-muted); margin-top: 0.25rem; display: block;">Se preenchido, sairá impresso nos talões e no Relatório Z.</small>
+        </div>
+
         ${modal.actions('Cancelar', 'Salvar Unidade')}
       </form>
     `;
@@ -203,6 +223,7 @@ class UnidadesModule {
       nome: form.nome.value.trim(),
       tipo: form.tipo.value,
       endereco: form.endereco.value.trim(),
+      cnpj: form.cnpj.value.trim() || null,
       visivel: true
     };
 
