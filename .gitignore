@@ -42,3 +42,16 @@ Thumbs.db
 # Logs
 *.log
 src/assets/js/config/config.local.js
+
+# Capacitor / Android (artefactos de build — o projeto android/ vai pro repo)
+.apk-temp/
+android/.gradle/
+android/app/build/
+android/build/
+android/captures/
+android/local.properties
+android/.idea/
+
+# O APK de distribuição EM downloads/ DEVE ir pro repo (Netlify serve o download)
+!downloads/
+!downloads/*.apk

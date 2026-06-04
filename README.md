@@ -103,6 +103,33 @@ caixa_turnos
 
 (O script de inicialização SQL encontra-se na documentação interna do projeto).
 
+📱 Aplicativo Android (Capacitor)
+
+O RicaZo PDV tem um APK Android que é um wrapper Capacitor: ele carrega `https://ricazo.netlify.app`
+numa WebView. Por isso, mudanças de UI/lógica web NÃO precisam de rebuild do APK — entram ao vivo.
+Rebuild só é necessário para: nova versão, mudança no `capacitor.config.json`, AndroidManifest ou plugins nativos.
+
+**Recursos nativos** (em `src/assets/js/core/native.js`, só ativos dentro do APK):
+- Auto-atualização: compara a versão instalada com `update-manifest.json` e mostra modal de update.
+- Botão/gesto de voltar do Android: navega no histórico e pede confirmação antes de sair na tela inicial.
+
+**Build do APK:**
+
+```bash
+npm install        # primeira vez (instala Capacitor)
+npm run build:apk  # gera downloads/RicaZo PDV.apk
+```
+
+> ⚠️ O build usa o Java embutido no Android Studio (`C:/Program Files/Android/Android Studio/jbr`).
+> O Android Studio precisa estar instalado.
+
+**Processo de release:**
+1. Bump `versionCode` (+1) e `versionName` (semver) em `android/app/build.gradle`.
+2. Atualizar `update-manifest.json` com a nova `latestVersion` e as `notes`.
+3. `npm run build:apk`.
+4. `git add android/app/build.gradle update-manifest.json "downloads/RicaZo PDV.apk"` + commit + push.
+5. Netlify publica → download disponível em `https://ricazo.netlify.app/downloads/RicaZo%20PDV.apk`.
+
 📱 Responsividade
 
 A interface foi construída com princípios de Mobile-First adaptativo. O Módulo de Caixa funciona perfeitamente em Tablets de 10", enquanto o Módulo PDV de lançamento (Garçom) é otimizado para ecrãs de Smartphones. O Dashboard Administrativo suporta visualização em Desktop para maior conforto na leitura de métricas.

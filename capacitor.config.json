@@ -1,0 +1,12 @@
+{
+  "appId": "com.ricazo.pdv",
+  "appName": "RicaZo PDV",
+  "webDir": "apk-www",
+  "server": {
+    "url": "https://ricazo.netlify.app",
+    "cleartext": true
+  },
+  "android": {
+    "allowMixedContent": true
+  }
+}

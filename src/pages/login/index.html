@@ -41,6 +41,9 @@
           <button id="btn-instalar-pdv" onclick="instalarAtalhoPDV()" style="margin-top: 0.75rem; background: var(--bg-tertiary); color: var(--text-secondary); border: 1px solid var(--border-color); padding: 0.4rem 1rem; border-radius: var(--border-radius); cursor: pointer; font-size: 0.75rem; transition: var(--transition);" title="Cria atalho para impressão direta (sem diálogo)">
             🖨️ Instalar Atalho PDV (Impressão Direta)
           </button>
+          <button id="btn-baixar-apk" onclick="baixarAppAndroid()" style="margin-top: 0.5rem; background: var(--bg-tertiary); color: var(--text-secondary); border: 1px solid var(--border-color); padding: 0.4rem 1rem; border-radius: var(--border-radius); cursor: pointer; font-size: 0.75rem; transition: var(--transition);" title="Baixa o aplicativo Android (APK)">
+            📲 Baixar App Android (APK)
+          </button>
         </div>
       </div>
     </div>
@@ -55,6 +58,7 @@
   <!-- Core -->
   <script src="/src/assets/js/core/supabase.js"></script>
   <script src="/src/assets/js/core/auth.js"></script>
+  <script src="/src/assets/js/core/native.js"></script>
 
   <script>
     // Tema no login
@@ -104,6 +108,23 @@
         btnSpinner.classList.add('hidden');
       }
     });
+
+    // Baixar o APK Android
+    function baixarAppAndroid() {
+      const url = '/downloads/RicaZo%20PDV.apk';
+      // Dentro do APK (Capacitor), abre no navegador do sistema; no browser, download direto.
+      const Cap = window.Capacitor;
+      if (Cap && typeof Cap.isNativePlatform === 'function' && Cap.isNativePlatform() && Cap.Plugins && Cap.Plugins.Browser) {
+        Cap.Plugins.Browser.open({ url: window.location.origin + url });
+        return;
+      }
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'RicaZo PDV.apk';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+    }
 
     // Instalar atalho PDV (.bat para impressão direta)
     function instalarAtalhoPDV() {

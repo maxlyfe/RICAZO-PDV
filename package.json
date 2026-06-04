@@ -4,8 +4,16 @@
   "description": "Sistema de Controle de Vendas para Rede de Padarias",
   "scripts": {
     "dev": "node server.js",
-    "start": "node server.js"
+    "start": "node server.js",
+    "build:apk": "node scripts/build-apk.js"
   },
-  "devDependencies": {},
-  "dependencies": {}
+  "devDependencies": {
+    "@capacitor/cli": "^8.3.3"
+  },
+  "dependencies": {
+    "@capacitor/android": "^8.3.3",
+    "@capacitor/app": "^8.1.0",
+    "@capacitor/browser": "^8.0.3",
+    "@capacitor/core": "^8.3.3"
+  }
 }
