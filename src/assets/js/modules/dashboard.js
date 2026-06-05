@@ -284,11 +284,15 @@ class DashboardModule {
       }
 
       const LIMITE_POR_UNIDADE = 5000;
-      const dataInicioIso = `${this.filtros.dataInicio}T00:00:00.000Z`;
-      const dataFimIso = `${this.filtros.dataFim}T23:59:59.999Z`;
+      // Janela no fuso de Brasília (UTC-3). Usar offset BR (-03:00) em vez de UTC (Z)
+      // garante que o filtro "DD/MM" pegue exatamente o dia local 00:00→23:59 do Brasil,
+      // alinhando os cards, o gráfico e os Relatórios Z no mesmo dia.
+      const dataInicioIso = `${this.filtros.dataInicio}T00:00:00.000-03:00`;
+      const dataFimIso = `${this.filtros.dataFim}T23:59:59.999-03:00`;
 
-      const fusoOffset = new Date().getTimezoneOffset() * 60000;
-      const hojeStr = new Date(Date.now() - fusoOffset).toISOString().split('T')[0];
+      // Fuso de Brasília fixo (UTC-3, sem horário de verão) — independe do fuso do dispositivo
+      const BR_OFFSET_MS = 3 * 60 * 60 * 1000;
+      const hojeStr = new Date(Date.now() - BR_OFFSET_MS).toISOString().split('T')[0];
 
       this.alertaLimite = []; // unidades que atingiram o limite
 
@@ -391,8 +395,7 @@ class DashboardModule {
         v.pagamentos = pagamentosAgrupados[v.id] || [];
         
         const dataFechamento = new Date(v.data_fechamento);
-        const fusoVenda = dataFechamento.getTimezoneOffset() * 60000;
-        const diaVendaStr = new Date(dataFechamento.getTime() - fusoVenda).toISOString().split('T')[0];
+        const diaVendaStr = new Date(dataFechamento.getTime() - BR_OFFSET_MS).toISOString().split('T')[0];
         
         const isHoje = diaVendaStr === hojeStr;
         const taxaVenda = parseFloat(v.taxa_servico || 0);
