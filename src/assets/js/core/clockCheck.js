@@ -133,15 +133,38 @@
   }
 
   async function init() {
-    // Mostra no máximo uma vez por sessão para não incomodar
-    if (sessionStorage.getItem(SS_KEY)) return;
+    // MODO DE TESTE: abra o site com ?clocktest=180 (minutos) para forçar o modal
+    // e validar o visual, sem precisar mexer no relógio. Ex.: ?clocktest=10 (leve),
+    // ?clocktest=120 (forte), ?clocktest=600 (enfático). Use negativo para "atrasado".
+    try {
+      const params = new URLSearchParams(window.location.search);
+      if (params.has('clocktest')) {
+        const min = parseFloat(params.get('clocktest'));
+        const skew = (isNaN(min) ? 180 : min) * 60000;
+        const now = Date.now();
+        console.info('[ClockCheck] MODO TESTE — simulando diferença de', min, 'min');
+        mostrarModal(nivel(Math.abs(skew)) || 'forte', skew, now, now - skew);
+        return;
+      }
+    } catch (e) { /* ignore */ }
+
+    // Mostra no máximo uma vez por sessão (após o usuário reconhecer um aviso)
+    if (sessionStorage.getItem(SS_KEY)) {
+      console.info('[ClockCheck] aviso já reconhecido nesta sessão — pulando verificação.');
+      return;
+    }
 
     const serverTime = await getServerTime();
-    if (!serverTime) return; // sem internet / sem fonte confiável → não bloqueia nada
+    if (!serverTime) {
+      console.warn('[ClockCheck] não foi possível obter a hora do servidor (offline ou relógio tão errado que bloqueou HTTPS). Verificação ignorada.');
+      return;
+    }
 
     const deviceTime = Date.now();
     const skew = deviceTime - serverTime; // >0 = aparelho adiantado
+    const skewMin = (skew / 60000).toFixed(1);
     const n = nivel(Math.abs(skew));
+    console.info('[ClockCheck] diferença aparelho vs servidor:', skewMin, 'min | nível:', n || 'OK (dentro da tolerância de 2 min)');
 
     if (!n) {
       // Relógio OK — NÃO marca a sessão, para re-checar em cada carregamento
@@ -150,6 +173,8 @@
     }
     mostrarModal(n, skew, deviceTime, serverTime);
   }
+  // Permite re-rodar manualmente pelo console: __ricazoClockCheck()
+  window.__ricazoClockCheck = init;
 
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', init);
