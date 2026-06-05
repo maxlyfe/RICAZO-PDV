@@ -66,7 +66,7 @@
     enfatico: { cor: '#991B1B', fundo: '#FEE2E2', borda: '#DC2626', icone: '🚨', titulo: 'ALERTA: horário muito errado!' }
   };
 
-  function mostrarModal(nivelAviso, skewMs, deviceTime, serverTime) {
+  function mostrarModal(nivelAviso, skewMs, deviceTime, serverTime, isTest) {
     const est = ESTILOS[nivelAviso];
     const adiantado = skewMs > 0;
     const diffTxt = formatarDiferenca(Math.abs(skewMs));
@@ -127,7 +127,7 @@
     });
     btn.addEventListener('click', () => {
       if (!ck.checked) return;
-      sessionStorage.setItem(SS_KEY, 'ack');
+      if (!isTest) sessionStorage.setItem(SS_KEY, 'ack'); // teste não contamina a sessão
       overlay.remove();
     });
   }
@@ -143,7 +143,7 @@
         const skew = (isNaN(min) ? 180 : min) * 60000;
         const now = Date.now();
         console.info('[ClockCheck] MODO TESTE — simulando diferença de', min, 'min');
-        mostrarModal(nivel(Math.abs(skew)) || 'forte', skew, now, now - skew);
+        mostrarModal(nivel(Math.abs(skew)) || 'forte', skew, now, now - skew, true);
         return;
       }
     } catch (e) { /* ignore */ }
