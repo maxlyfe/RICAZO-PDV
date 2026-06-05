@@ -144,8 +144,8 @@
     const n = nivel(Math.abs(skew));
 
     if (!n) {
-      // Relógio OK — marca a sessão para não checar de novo
-      sessionStorage.setItem(SS_KEY, 'ok');
+      // Relógio OK — NÃO marca a sessão, para re-checar em cada carregamento
+      // (assim, se a hora mudar no meio do uso, o aviso ainda aparece).
       return;
     }
     mostrarModal(n, skew, deviceTime, serverTime);
