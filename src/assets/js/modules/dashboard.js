@@ -190,7 +190,7 @@ class DashboardModule {
 
   async carregarUnidadesFiltro() {
     try {
-      const { data } = await db.getClient().from('unidades').select('id, nome').eq('visivel', true).order('nome');
+      const { data } = await db.getClient().from('unidades').select('id, nome, cnpj').eq('visivel', true).order('nome');
       this.unidades = data || [];
     } catch (error) {}
   }
