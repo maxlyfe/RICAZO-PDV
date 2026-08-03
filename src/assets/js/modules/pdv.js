@@ -375,14 +375,6 @@ class PdvModule {
     `).join('');
   }
 
-  somarPeso(valorEmKg) {
-    const input = document.getElementById('input-peso');
-    if (!input) return;
-    let pesoAtual = parseFloat(input.value) || 0;
-    input.value = (pesoAtual + valorEmKg).toFixed(3);
-    input.focus();
-  }
-
   _comboTemOpcoes(produto) {
     return produto.is_combo && produto.itens_combo && produto.itens_combo.some(i => i.tipo === 'opcao');
   }
@@ -488,20 +480,18 @@ class PdvModule {
             <h4 style="font-size: 1.25rem;">${produto.nome}</h4>
             <p style="color: var(--primary); font-weight: 700;">R$ ${produto.preco_venda.toFixed(2)} / KG</p>
           </div>
-          <div style="margin-bottom: 1.5rem;">
+          <div style="margin-bottom: 1.25rem;">
             <label class="form-label" style="text-align: center; margin-bottom: 0.75rem;">Adicionar Quantidade</label>
             <div style="display: flex; gap: 0.5rem; justify-content: center; flex-wrap: wrap;">
-              <button type="button" class="btn btn-sm btn-secondary" onclick="pdvModule.somarPeso(0.050)">+ 50g</button>
-              <button type="button" class="btn btn-sm btn-secondary" onclick="pdvModule.somarPeso(0.100)">+ 100g</button>
-              <button type="button" class="btn btn-sm btn-secondary" onclick="pdvModule.somarPeso(0.150)">+ 150g</button>
-              <button type="button" class="btn btn-sm btn-secondary" onclick="pdvModule.somarPeso(0.200)">+ 200g</button>
-              <button type="button" class="btn btn-sm btn-secondary" onclick="pdvModule.somarPeso(0.250)">+ 250g</button>
-            </div>
-            <div style="text-align: center; margin-top: 0.75rem;">
-              <button type="button" class="btn btn-sm btn-ghost" onclick="document.getElementById('input-peso').value=''; document.getElementById('input-peso').focus();">🔄 Zerar Peso</button>
+              ${pesoValor.atalhos({ precoKg: produto.preco_venda })}
             </div>
           </div>
-          ${modal.formGroup('Peso Total (em KG) *', `<input type="number" step="0.001" min="0.001" name="peso" id="input-peso" class="form-input" style="font-size: 1.75rem; text-align: center; font-weight: 800; color: var(--primary);" required autofocus placeholder="0.000">`)}
+          <div class="form-group" style="margin-bottom: 0.75rem;">
+            ${pesoValor.campos({ precoKg: produto.preco_venda })}
+          </div>
+          <div style="text-align: center; margin-bottom: 0.5rem;">
+            ${pesoValor.botaoZerar({})}
+          </div>
           ${modal.actions('Cancelar', 'Confirmar Adição')}
         </form>
       `;

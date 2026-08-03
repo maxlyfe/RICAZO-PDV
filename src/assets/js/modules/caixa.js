@@ -873,17 +873,17 @@ class CaixaModule {
           </div>
           <form onsubmit="caixaModule.confirmarPesoBalcao(event, '${produto.id}')">
             <div style="text-align: center; margin-bottom: 1.5rem;"><h4 style="font-size: 1.25rem;">${produto.nome}</h4><p style="color: var(--primary); font-weight: 700;">R$ ${produto.preco_venda.toFixed(2)} / KG</p></div>
-            <div style="margin-bottom: 1.5rem;">
+            <div style="margin-bottom: 1.25rem;">
               <label class="form-label" style="text-align: center; margin-bottom: 0.75rem;">Adicionar Quantidade</label>
               <div style="display: flex; gap: 0.5rem; justify-content: center; flex-wrap: wrap;">
-                <button type="button" class="btn btn-sm btn-secondary" onclick="document.getElementById('input-peso-balcao').value=(parseFloat(document.getElementById('input-peso-balcao').value||0)+0.05).toFixed(3)">+ 50g</button>
-                <button type="button" class="btn btn-sm btn-secondary" onclick="document.getElementById('input-peso-balcao').value=(parseFloat(document.getElementById('input-peso-balcao').value||0)+0.1).toFixed(3)">+ 100g</button>
-                <button type="button" class="btn btn-sm btn-secondary" onclick="document.getElementById('input-peso-balcao').value=(parseFloat(document.getElementById('input-peso-balcao').value||0)+0.2).toFixed(3)">+ 200g</button>
+                ${pesoValor.atalhos({ precoKg: produto.preco_venda, idPeso: 'input-peso-balcao', idValor: 'input-valor-balcao', passos: [0.05, 0.1, 0.2] })}
               </div>
             </div>
-            <div class="form-group">
-              <label class="form-label">Peso Total (em KG) *</label>
-              <input type="number" step="0.001" min="0.001" name="peso" id="input-peso-balcao" class="form-input input-caixa-grande" style="font-size: 1.5rem; text-align: center; font-weight: 800; color: var(--primary);" required autofocus placeholder="0.000">
+            <div class="form-group" style="margin-bottom: 0.75rem;">
+              ${pesoValor.campos({ precoKg: produto.preco_venda, idPeso: 'input-peso-balcao', idValor: 'input-valor-balcao' })}
+            </div>
+            <div style="text-align: center; margin-bottom: 0.5rem;">
+              ${pesoValor.botaoZerar({ idPeso: 'input-peso-balcao', idValor: 'input-valor-balcao' })}
             </div>
             <div class="modal-actions" style="display: flex; gap: 0.5rem; justify-content: stretch; margin-top: 1rem; border-top: 1px solid var(--border-color); padding-top: 0.75rem;">
               <button type="button" class="btn btn-secondary" style="flex: 1;" onclick="document.getElementById('modal-peso-secundario').remove()">Cancelar</button>
