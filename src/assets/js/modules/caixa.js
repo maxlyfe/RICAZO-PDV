@@ -25,8 +25,7 @@ class CaixaModule {
     this.historicoTurnoAtual = [];
     this.historicoPagamentosAtual = {};
 
-    // Impressão Remota: listener para fila de impressão
-    this.printSubscription = null;
+    // Impressão: o listener da fila remota vive em core/printer.js
     this.isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
   }
 
@@ -459,6 +458,15 @@ class CaixaModule {
           <div style="font-size: 0.8rem; font-weight: 800; color: var(--text-primary);">+ R$ ${valorTaxa.toFixed(2)}</div>
         </div>
       ` : ''}
+
+      <!-- CONFERÊNCIA - imprime a pré conta sem fechar a venda -->
+      <div style="background: var(--bg-secondary); padding: 0.4rem 0.75rem; border-top: 1px solid var(--border-color); flex-shrink: 0;">
+        <button class="btn btn-extrato w-full" style="font-size: 0.8rem; padding: 0.45rem;"
+                onclick="caixaModule.imprimirExtratoConferencia()"
+                ${v.itens.length === 0 ? 'disabled' : ''}>
+          🧾 Extrato de Conferência
+        </button>
+      </div>
 
       <!-- PAYMENT AREA - compacto, sem scroll -->
       <div class="pagamento-area-mobile" style="background: var(--bg-secondary); border-top: 2px solid var(--primary); padding: 0.5rem 0.75rem; flex-shrink: 0;">
@@ -1047,7 +1055,7 @@ class CaixaModule {
   }
 
   // ==========================================
-  // IMPRESSÃO REMOTA (Mobile → PC via Supabase Realtime)
+  // IMPRESSÃO (delegada ao core/printer.js)
   // ==========================================
 
   /**
@@ -1055,104 +1063,50 @@ class CaixaModule {
    * Apenas PCs (com Chrome --kiosk-printing) escutam.
    */
   iniciarListenerImpressao() {
-    if (this.printSubscription) {
-      this.printSubscription.unsubscribe();
-    }
-
-    const unidadeId = this.unidadeAtual;
-    if (!unidadeId) return;
-
-    const client = db.getClient();
-    if (!client) return;
-
-    this.printSubscription = client
-      .channel('fila-impressao')
-      .on('postgres_changes', {
-        event: 'INSERT',
-        schema: 'public',
-        table: 'fila_impressao',
-        filter: `unidade_id=eq.${unidadeId}`
-      }, async (payload) => {
-        const job = payload.new;
-        if (job.status !== 'pendente') return;
-
-        // Imprime localmente (chama direto o print, não o wrapper)
-        this._imprimirLocal(job.html);
-
-        // Marca como impresso
-        try {
-          await client.from('fila_impressao')
-            .update({ status: 'impresso', impresso_em: new Date().toISOString() })
-            .eq('id', job.id);
-        } catch (e) {
-          console.warn('Erro ao marcar impressão como concluída:', e);
-        }
-      })
-      .subscribe();
-
-    console.log('🖨️ Listener de impressão remota ativo para esta unidade.');
+    printer.iniciarListener(this.unidadeAtual);
   }
 
-  /**
-   * Envia HTML para fila de impressão remota (usado por dispositivos mobile).
-   * O PC da unidade que estiver com o listener ativo irá imprimir.
-   */
-  async _enviarParaFilaImpressao(conteudoHtml) {
-    try {
-      const client = db.getClient();
-      if (!client) throw new Error('Supabase não conectado');
-      const { error } = await client.from('fila_impressao').insert({
-        unidade_id: this.unidadeAtual,
-        html: conteudoHtml,
-        solicitado_por: auth.getCurrentUser()?.id || null,
-        status: 'pendente'
-      });
-      if (error) throw error;
-      return true;
-    } catch (e) {
-      console.error('Erro ao enviar para fila de impressão:', e);
-      return false;
-    }
-  }
-
-  /** Limpa registros de impressão com mais de 24h para não acumular lixo */
   async _limparFilaImpressaoAntiga() {
-    try {
-      const client = db.getClient();
-      if (!client) return;
-      const ontem = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
-      await client.from('fila_impressao').delete().lt('created_at', ontem);
-    } catch (e) { /* silencioso */ }
+    return printer.limparFilaAntiga();
+  }
+
+  _imprimirFallback(conteudoHtml, mensagemEnvio = null) {
+    printer.imprimir(conteudoHtml, this.unidadeAtual, mensagemEnvio);
   }
 
   // ==========================================
-  // FUNÇÕES DE IMPRESSÃO
+  // EXTRATO DE CONFERÊNCIA (PRÉ CONTA)
   // ==========================================
-
-  /** Imprime localmente via window.print() (PC com Chrome --kiosk-printing) */
-  _imprimirLocal(conteudoHtml) {
-    let printDiv = document.getElementById('print-section');
-    if (!printDiv) { printDiv = document.createElement('div'); printDiv.id = 'print-section'; document.body.appendChild(printDiv); }
-    printDiv.innerHTML = conteudoHtml;
-    setTimeout(() => window.print(), 150);
-  }
 
   /**
-   * Impressão inteligente:
-   * - PC: imprime localmente via window.print()
-   * - Mobile: envia para fila remota (PC da unidade imprime)
+   * Imprime o extrato de conferência da comanda selecionada.
+   * Não fecha a venda e não lança pagamento: é só para o cliente conferir.
    */
-  _imprimirFallback(conteudoHtml) {
-    if (this.isMobile) {
-      this._enviarParaFilaImpressao(conteudoHtml).then(ok => {
-        if (!ok) {
-          alert('❌ Erro ao enviar impressão para o PC. Verifique a conexão.');
-        }
-      });
-      return;
-    }
+  imprimirExtratoConferencia() {
+    const v = this.vendaSelecionada;
+    if (!v) return alert('⚠️ Selecione uma comanda primeiro.');
+    if (!v.itens || v.itens.length === 0) return alert('⚠️ Esta comanda não tem itens lançados.');
 
-    this._imprimirLocal(conteudoHtml);
+    const mesa = this.mesas.find(m => m.id === v.mesa_id);
+    const identificador = v.tipo === 'balcao' ? 'BALCÃO' : `MESA ${mesa ? mesa.numero : v.identificador}`;
+
+    const subtotal = v.itens.reduce((sum, item) => sum + parseFloat(item.subtotal), 0);
+    const taxaValor = subtotal * (this.taxaServicoPercent / 100);
+
+    const html = printer.extratoConferenciaHtml({
+      unidade: auth.getUnidadeAtual(),
+      identificador: identificador,
+      itens: v.itens,
+      subtotal: subtotal,
+      taxaPercent: this.taxaServicoPercent,
+      taxaValor: taxaValor,
+      atendente: auth.getCurrentUser()?.nome,
+      vendaId: v.id,
+      abertaEm: v.created_at,
+      via: printer.proximaVia(v.id)
+    });
+
+    this._imprimirFallback(html, '🧾 Extrato enviado para a impressora da unidade.');
   }
 
   imprimirTicket(venda, pagamentos, trocoTotal, subtotal, taxaValor, taxaPercent, isReimpressao = false) {

@@ -87,6 +87,12 @@ body { font-family: var(--font-family); background-color: var(--bg-primary); col
 .btn-sm { padding: 0.5rem 1rem; font-size: 0.875rem; }
 .btn-lg { padding: 1rem 2rem; font-size: 1.125rem; }
 
+/* Extrato de Conferência: cara de cupom (borda picotada), sem alterar o tamanho */
+.btn-extrato { background: linear-gradient(135deg, rgba(232, 145, 58, 0.12), rgba(232, 145, 58, 0.03)); color: var(--primary); border: 1px dashed var(--primary); font-weight: 700; letter-spacing: 0.3px; }
+.btn-extrato:hover:not(:disabled) { background: linear-gradient(135deg, var(--primary), var(--primary-dark)); color: var(--text-inverse); border-style: solid; box-shadow: var(--shadow-sm); }
+.btn-extrato:active:not(:disabled) { transform: scale(0.99); }
+.btn-extrato:disabled { background: transparent; color: var(--text-muted); border-color: var(--border-color); }
+
 /* Formulários */
 .form-group { margin-bottom: 1.5rem; }
 .form-label { display: block; margin-bottom: 0.5rem; font-weight: 600; color: var(--text-primary); font-size: 0.875rem; text-transform: uppercase; letter-spacing: 0.5px; }
@@ -491,6 +497,13 @@ body { font-family: var(--font-family); background-color: var(--bg-primary); col
   }
   .tk-bold > span { font-weight: 900 !important; }
 
+  /* ===== SUBLINHA DO ITEM (qtd x preço unitário) ===== */
+  .tk-sub {
+    font-size: 10px;
+    font-weight: 600;
+    padding: 0 0 3px 10px;
+  }
+
   /* ===== LINHA DE TEXTO SIMPLES ===== */
   .tk-line {
     padding: 2px 0;
@@ -565,6 +578,18 @@ body { font-family: var(--font-family); background-color: var(--bg-primary); col
     padding: 5px 0;
     border-top: 2px solid #000;
     border-bottom: 2px solid #000;
+  }
+
+  /* ===== AVISO EM DESTAQUE (ex: extrato de conferência) ===== */
+  .ticket-aviso {
+    border: 2px solid #000;
+    padding: 5px 6px;
+    margin: 7px 0;
+    text-align: center;
+    font-size: 11px;
+    font-weight: 900;
+    line-height: 1.4;
+    text-transform: uppercase;
   }
 
   /* ===== REIMPRESSÃO ===== */

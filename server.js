@@ -29,6 +29,13 @@ const server = http.createServer((req, res) => {
   // Remove query strings
   let url = req.url.split('?')[0];
   
+  // Favicon: as páginas declaram um SVG inline, então não há arquivo em disco
+  if (url === '/favicon.ico') {
+    res.writeHead(204);
+    res.end();
+    return;
+  }
+
   // Se for raiz, redireciona para login
   if (url === '/' || url === '/src/') {
     url = '/src/pages/login/index.html';

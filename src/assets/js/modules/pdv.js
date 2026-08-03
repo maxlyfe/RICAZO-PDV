@@ -286,6 +286,11 @@ class PdvModule {
           </div>
           
           <div class="pedido-acoes" style="flex-wrap: wrap; gap: 0.5rem;">
+            ${vendaAtual && vendaAtual.itens.length > 0 ? `
+              <button class="btn btn-extrato" style="flex: 1; min-width: 100%;" onclick="pdvModule.abrirModalExtratoConferencia('${vendaAtual.id}')">
+                🧾 Extrato de Conferência
+              </button>
+            ` : ''}
             ${vendaAtual && vendaAtual.itens.length > 0 && !vendaAtual.solicitou_fechamento ? `
               <button class="btn btn-warning" style="flex: 1; min-width: 100%;" onclick="pdvModule.solicitarFechamento('${vendaAtual.id}')">
                 🔔 Pedir Conta
@@ -654,6 +659,95 @@ class PdvModule {
     } catch (error) {
       alert('❌ Erro ao remover item: ' + error.message);
     }
+  }
+
+  // ==========================================
+  // EXTRATO DE CONFERÊNCIA (PRÉ CONTA)
+  // ==========================================
+
+  /**
+   * Escolha da taxa de serviço antes de imprimir o extrato.
+   * O extrato não fecha a comanda nem lança pagamento.
+   */
+  abrirModalExtratoConferencia(vendaId) {
+    const venda = this.vendasAbertas.find(v => v.id === vendaId);
+    if (!venda) return;
+    if (!venda.itens || venda.itens.length === 0) return alert('⚠️ Nenhum item lançado nesta comanda.');
+
+    const subtotal = venda.itens.reduce((sum, i) => sum + parseFloat(i.subtotal), 0);
+    const padrao = venda.tipo === 'mesa' ? 10 : 0;
+    const naoLancados = this.carrinho.reduce((sum, i) => sum + i.quantidade, 0);
+
+    const opcoesHtml = [0, 10, 12].map(p => `
+      <label style="display: flex; align-items: center; gap: 0.6rem; padding: 0.7rem 1rem; background: var(--bg-secondary); border-radius: var(--border-radius); cursor: pointer; border: 2px solid ${p === padrao ? 'var(--primary)' : 'transparent'}; transition: all 0.2s;"
+        onclick="this.parentElement.querySelectorAll('label').forEach(l=>l.style.borderColor='transparent'); this.style.borderColor='var(--primary)';">
+        <input type="radio" name="taxa" value="${p}" ${p === padrao ? 'checked' : ''} style="width: 18px; height: 18px;">
+        <span style="font-weight: 700;">${p === 0 ? 'Sem taxa' : `Taxa de ${p}%`}</span>
+        <span style="margin-left: auto; font-weight: 800; color: var(--primary);">R$ ${(subtotal * (1 + p / 100)).toFixed(2)}</span>
+      </label>
+    `).join('');
+
+    const content = `
+      <div class="card-header">
+        <h3 class="card-title">🧾 Extrato de Conferência</h3>
+        <button class="btn btn-ghost btn-sm" onclick="modal.close()">✕</button>
+      </div>
+      <div style="padding: 0.75rem 1rem; background: var(--bg-secondary); border-radius: var(--border-radius); margin-bottom: 1rem;">
+        <div style="font-size: 0.8rem; color: var(--text-secondary);">Consumo lançado (${venda.itens.length} ${venda.itens.length === 1 ? 'item' : 'itens'})</div>
+        <div style="font-size: 1.35rem; font-weight: 800; color: var(--text-primary);">R$ ${subtotal.toFixed(2)}</div>
+      </div>
+      ${naoLancados > 0 ? `
+        <div style="padding: 0.75rem 1rem; border: 2px solid var(--warning); border-radius: var(--border-radius); margin-bottom: 1rem; font-size: 0.85rem; font-weight: 600; color: var(--text-primary);">
+          ⚠️ Há ${naoLancados} item(ns) no carrinho ainda não lançado(s). Eles não vão aparecer no extrato. Cancele, use 📤 Lançar e imprima depois.
+        </div>
+      ` : ''}
+      <form onsubmit="pdvModule.confirmarExtratoConferencia(event, '${vendaId}')">
+        <label class="form-label" style="font-size: 0.85rem;">Taxa de serviço</label>
+        <div style="display: flex; flex-direction: column; gap: 0.4rem; margin-bottom: 0.5rem;">
+          ${opcoesHtml}
+        </div>
+        <p style="font-size: 0.75rem; color: var(--text-muted); margin: 0.5rem 0 0;">
+          O extrato serve apenas para conferência do cliente. A comanda continua aberta e o pagamento é lançado no caixa.
+        </p>
+        ${modal.actions('Cancelar', '🖨️ Imprimir')}
+      </form>
+    `;
+    modal.open(content);
+  }
+
+  confirmarExtratoConferencia(event, vendaId) {
+    event.preventDefault();
+    const percent = parseFloat(event.target.taxa.value) || 0;
+    modal.close();
+    this.imprimirExtratoConferencia(vendaId, percent);
+  }
+
+  imprimirExtratoConferencia(vendaId, taxaPercent) {
+    const venda = this.vendasAbertas.find(v => v.id === vendaId);
+    if (!venda) return;
+
+    const mesa = this.mesas.find(m => m.id === venda.mesa_id);
+    const identificador = venda.tipo === 'balcao'
+      ? 'BALCÃO'
+      : (mesa ? (mesa.nome || `MESA ${mesa.numero}`) : 'MESA');
+
+    const subtotal = venda.itens.reduce((sum, i) => sum + parseFloat(i.subtotal), 0);
+    const taxaValor = subtotal * (taxaPercent / 100);
+
+    const html = printer.extratoConferenciaHtml({
+      unidade: auth.getUnidadeAtual(),
+      identificador: identificador,
+      itens: venda.itens,
+      subtotal: subtotal,
+      taxaPercent: taxaPercent,
+      taxaValor: taxaValor,
+      atendente: auth.getCurrentUser()?.nome,
+      vendaId: venda.id,
+      abertaEm: venda.created_at,
+      via: printer.proximaVia(venda.id)
+    });
+
+    printer.imprimir(html, this.unidadeAtual, '🧾 Extrato enviado para a impressora da unidade.');
   }
 
   async solicitarFechamento(vendaId) {
